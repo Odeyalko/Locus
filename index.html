@@ -1,0 +1,1276 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Locus — адресное хранение</title>
+<meta name="description" content="Адресное хранение ПВЗ: стройте склад, отмечайте ячейки и передавайте смене одним файлом.">
+<meta name="theme-color" content="#000000">
+<link rel="icon" type="image/x-icon" href="favicon.ico">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<style>
+:root{
+  --black:#000;--white:#fff;--gray:#969696;--gray-light:#ededed;--orange:#f93c00;--green:#d9fcab;
+  --bg:#fff;--fg:#000;--panel:#fff;--line:#ededed;--line-strong:#b0b0b0;--muted:#6b6b6b;
+  --canvas:#f5f5f5;--dot:#d2d2d2;
+  --btn-bg:#000;--btn-fg:#fff;
+  --cell:#fff;--cell-line:#b9b9b9;--tag:#ededed;--frame:#868b91;--head:#000;
+  --done-bg:#d9fcab;--done-line:#5f9f14;--done-fg:#2b5700;
+  --warn-bg:#ffd8cb;--warn-line:#f93c00;--warn-fg:#9c2400;
+  --font-display:"Times New Roman",Times,serif;--font-body:Arial,Helvetica,sans-serif;--radius:2px;
+  box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#0b0b0b;--fg:#f2f2f2;--panel:#151515;--line:#2a2a2a;--line-strong:#4b4b4b;--muted:#a0a0a0;
+    --canvas:#101010;--dot:#2a2a2a;--btn-bg:#f2f2f2;--btn-fg:#000;
+    --cell:#1d1d1d;--cell-line:#4b4b4b;--tag:#262626;--frame:#5c6369;--head:#2a2a2a;
+    --done-bg:#2d4b12;--done-line:#8fd13a;--done-fg:#d9fcab;
+    --warn-bg:#4d1b0d;--warn-line:#ff6a3d;--warn-fg:#ffc3b0;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0b0b0b;--fg:#f2f2f2;--panel:#151515;--line:#2a2a2a;--line-strong:#4b4b4b;--muted:#a0a0a0;
+  --canvas:#101010;--dot:#2a2a2a;--btn-bg:#f2f2f2;--btn-fg:#000;
+  --cell:#1d1d1d;--cell-line:#4b4b4b;--tag:#262626;--frame:#5c6369;--head:#2a2a2a;
+  --done-bg:#2d4b12;--done-line:#8fd13a;--done-fg:#d9fcab;
+  --warn-bg:#4d1b0d;--warn-line:#ff6a3d;--warn-fg:#ffc3b0;
+}
+*,*::before,*::after{box-sizing:border-box}
+html{height:100%;scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;height:100%;background:var(--bg);color:var(--fg);font:14px/1.5 var(--font-body);-webkit-font-smoothing:antialiased;overflow:hidden}
+button,input,textarea,select{font:inherit;color:inherit}
+[hidden]{display:none!important}
+#app{height:100%;display:flex;flex-direction:column}
+
+/* ───────── Topbar ───────── */
+.topbar{flex:none;height:56px;display:flex;align-items:center;gap:14px;padding:0 20px;border-bottom:1px solid var(--line);background:var(--bg)}
+.brand{display:flex;align-items:center;gap:12px;background:none;border:0;padding:0;cursor:pointer}
+.brand svg{height:17px;width:auto;display:block;color:var(--fg)}
+.brand-name{font-family:var(--font-display);font-size:22px;letter-spacing:.01em}
+.vsep{width:1px;height:20px;background:var(--line-strong);flex:none}
+.crumbs{display:flex;align-items:center;gap:8px;min-width:0;font-size:13px;color:var(--muted);white-space:nowrap}
+.crumbs button{background:none;border:0;padding:0;cursor:pointer;color:var(--muted);text-decoration:underline;text-underline-offset:3px}
+.crumbs button:hover{color:var(--orange)}
+.crumbs .cur{color:var(--fg);font-weight:700;overflow:hidden;text-overflow:ellipsis}
+.grow{flex:1}
+.save-ind{font-size:12px;color:var(--muted);white-space:nowrap}
+.save-ind.bad{color:var(--orange);font-weight:700}
+.btn .short{display:none}
+
+/* ───────── Buttons ───────── */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:8px 14px;border:1px solid var(--line-strong);background:var(--panel);color:var(--fg);border-radius:var(--radius);font-size:13px;font-weight:700;line-height:1;cursor:pointer;white-space:nowrap;transition:background .2s,color .2s,border-color .2s,transform .2s}
+.btn:hover:not(:disabled){border-color:var(--orange);color:var(--orange)}
+.btn:active:not(:disabled){transform:translateY(1px)}
+.btn.primary{background:var(--btn-bg);color:var(--btn-fg);border-color:var(--btn-bg)}
+.btn.primary:hover:not(:disabled){background:var(--orange);border-color:var(--orange);color:#fff}
+.btn.danger{color:var(--orange);border-color:var(--orange)}
+.btn.danger:hover:not(:disabled){background:var(--orange);color:#fff}
+.btn.block{width:100%}
+.btn:disabled{opacity:.4;cursor:default}
+.btn:focus-visible,.icon-btn:focus-visible,.menu-btn:focus-visible,.seg button:focus-visible{outline:2px solid var(--orange);outline-offset:2px}
+.icon-btn{width:32px;height:32px;display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--line-strong);background:var(--panel);border-radius:var(--radius);cursor:pointer;font-size:16px;line-height:1}
+.icon-btn:hover:not(:disabled){border-color:var(--orange);color:var(--orange)}
+.icon-btn:disabled{opacity:.35;cursor:default}
+.seg{display:inline-flex;border:1px solid var(--line-strong);border-radius:var(--radius);overflow:hidden;flex:none}
+.seg button{border:0;border-right:1px solid var(--line);background:var(--panel);padding:7px 11px;font-size:12px;font-weight:700;cursor:pointer;line-height:1}
+.seg button:last-child{border-right:0}
+.seg button.on{background:var(--btn-bg);color:var(--btn-fg)}
+.seg button:hover:not(.on){color:var(--orange)}
+
+/* ───────── Home ───────── */
+#home{flex:1;min-height:0;overflow:auto;display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,1fr)}
+.home-hero{background:#000;color:#fff;padding:56px;display:flex;flex-direction:column;justify-content:space-between;gap:32px}
+.home-hero h1{margin:0;font-family:var(--font-display);font-weight:400;font-size:clamp(64px,10vw,124px);line-height:.92;letter-spacing:-.025em}
+.home-hero p{margin:18px 0 0;max-width:420px;font-size:17px;color:rgba(255,255,255,.75)}
+.demo{width:min(260px,70%);height:auto}
+.demo .frame{fill:none;stroke:rgba(255,255,255,.55);stroke-width:3}
+.demo .dc{fill:rgba(255,255,255,.08);stroke:rgba(255,255,255,.35);stroke-width:1.5;animation:dc 7s ease-in-out infinite}
+@keyframes dc{0%,18%{fill:rgba(255,255,255,.08)}26%,44%{fill:#d9fcab}54%,72%{fill:#f93c00}82%,100%{fill:rgba(255,255,255,.08)}}
+.legend{display:flex;gap:18px;flex-wrap:wrap;font-size:12px;color:rgba(255,255,255,.7)}
+.legend i{display:inline-block;width:10px;height:10px;margin-right:6px;border-radius:1px;vertical-align:-1px}
+.home-menu{padding:56px;display:flex;flex-direction:column;gap:12px;align-content:start;max-width:600px}
+.menu-btn{display:flex;align-items:center;justify-content:space-between;gap:16px;width:100%;padding:18px 20px;border:1px solid var(--line-strong);background:var(--panel);color:var(--fg);border-radius:var(--radius);cursor:pointer;text-align:left;transition:border-color .2s,transform .2s,background .2s,color .2s}
+.menu-btn strong{display:block;font-family:var(--font-display);font-weight:400;font-size:24px;line-height:1.1}
+.menu-btn small{display:block;margin-top:3px;color:var(--muted);font-size:12px}
+.menu-btn .arrow{font-size:20px;opacity:.6}
+.menu-btn.primary{background:var(--btn-bg);color:var(--btn-fg);border-color:var(--btn-bg)}
+.menu-btn.primary small{color:inherit;opacity:.7}
+.menu-btn:hover:not(:disabled){border-color:var(--orange);transform:translateY(-1px)}
+.menu-btn.primary:hover:not(:disabled){background:var(--orange);color:#fff}
+.menu-btn:disabled{opacity:.45;cursor:default}
+.saved h2{margin:28px 0 8px;font-family:var(--font-display);font-weight:400;font-size:20px}
+.saved-row{display:flex;align-items:center;gap:12px;padding:12px 0;border-top:1px solid var(--line)}
+.saved-row .meta{flex:1;min-width:0}
+.saved-row b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.saved-row small{color:var(--muted);font-size:12px}
+.bar{height:5px;background:var(--line);border-radius:3px;overflow:hidden;margin-top:6px}
+.bar i{display:block;height:100%;background:var(--done-line);transition:width .3s}
+
+/* ───────── Workspace ───────── */
+#ws{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) 330px;grid-template-rows:auto auto minmax(0,1fr)}
+.notebar{grid-column:1/-1;grid-row:1;display:flex;gap:12px;align-items:center;padding:8px 20px;background:var(--done-bg);color:var(--done-fg);border-bottom:1px solid var(--done-line);font-size:13px}
+.notebar b{font-family:var(--font-display);font-weight:400;font-size:15px}
+.notebar span{flex:1;min-width:0;white-space:pre-wrap}
+.notebar button{background:none;border:0;cursor:pointer;font-size:18px;line-height:1}
+.toolbar{grid-column:1/-1;grid-row:2;display:flex;align-items:center;gap:10px;padding:8px 16px;border-bottom:1px solid var(--line);overflow-x:auto;white-space:nowrap;scrollbar-width:thin}
+.tb-grp{display:flex;align-items:center;gap:8px;flex:none}
+.search input{width:150px;padding:7px 10px;border:1px solid var(--line-strong);border-radius:var(--radius);background:var(--panel);font-size:13px;outline:none;transition:border-color .2s,box-shadow .2s}
+.search input:focus{border-color:var(--orange);box-shadow:0 0 0 2px rgba(249,60,0,.15)}
+.chip{display:inline-flex;align-items:center;gap:4px;padding:6px 10px;border:1px solid var(--line-strong);border-radius:999px;font-size:12px;font-weight:700;background:var(--panel);flex:none}
+.chip.ok{border-color:var(--done-line);color:var(--done-fg);background:var(--done-bg)}
+.chip.warn{border-color:var(--warn-line);color:var(--warn-fg);background:var(--warn-bg);cursor:pointer}
+.zoom-lbl{min-width:44px;text-align:center;font-size:12px;color:var(--muted)}
+.panel-toggle{display:none}
+
+.stage{grid-column:1;grid-row:3;position:relative;overflow:hidden;background-color:var(--canvas);background-image:radial-gradient(circle,var(--dot) 1px,transparent 1.6px);background-size:20px 20px;touch-action:none;user-select:none;-webkit-user-select:none;cursor:grab}
+.stage.panning{cursor:grabbing}
+.world{position:absolute;left:0;top:0;transform-origin:0 0;will-change:transform}
+.world.glide{transition:transform .38s ease}
+.stage.dive .world{animation:dive .38s ease}
+@keyframes dive{from{opacity:0;transform-origin:0 0}to{opacity:1}}
+.empty-hint{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;text-align:center;color:var(--muted);padding:24px}
+.empty-hint div{max-width:340px}
+.empty-hint b{display:block;font-family:var(--font-display);font-weight:400;font-size:26px;color:var(--fg);margin-bottom:6px}
+
+.inspector{grid-column:2;grid-row:3;min-height:0;border-left:1px solid var(--line);overflow:auto;padding:18px 18px 28px;background:var(--panel)}
+.insp-sec{padding-bottom:18px;margin-bottom:18px;border-bottom:1px solid var(--line)}
+.insp-sec:last-child{border-bottom:0;margin-bottom:0}
+.insp-sec h3{margin:0 0 10px;font-family:var(--font-display);font-weight:400;font-size:19px;line-height:1.15}
+.insp-sec p{margin:0 0 10px;font-size:12px;color:var(--muted)}
+.insp-sec p.warn{color:var(--orange);font-weight:700}
+.fld{display:flex;flex-direction:column;gap:4px;margin-bottom:10px;font-size:12px;color:var(--muted)}
+.fld input,.fld textarea{width:100%;padding:8px 10px;border:1px solid var(--line-strong);border-radius:var(--radius);background:var(--bg);font-size:14px;outline:none;color:var(--fg)}
+.fld textarea{min-height:76px;resize:vertical}
+.fld input:focus,.fld textarea:focus{border-color:var(--orange);box-shadow:0 0 0 2px rgba(249,60,0,.15)}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.frow{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;font-size:13px}
+.frow>span{color:var(--muted);font-size:12px}
+.stepper{display:inline-flex;align-items:center;border:1px solid var(--line-strong);border-radius:var(--radius);overflow:hidden}
+.stepper button{width:32px;height:32px;border:0;background:var(--panel);cursor:pointer;font-size:16px;font-weight:700}
+.stepper button:hover{color:var(--orange)}
+.stepper b{min-width:36px;text-align:center;font-size:14px}
+.shelf-row{padding:8px 10px;border:1px solid var(--line);border-radius:var(--radius);margin-bottom:6px;display:flex;align-items:center;justify-content:space-between;gap:8px}
+.shelf-row.on{border-color:var(--orange);box-shadow:0 0 0 2px rgba(249,60,0,.15)}
+.shelf-row b{font-size:13px}
+.shelf-row .seg button{padding:6px 8px}
+.list-btn{display:flex;width:100%;justify-content:space-between;gap:10px;padding:9px 10px;margin-bottom:6px;border:1px solid var(--line);background:var(--panel);border-radius:var(--radius);cursor:pointer;text-align:left;font-size:13px}
+.list-btn:hover{border-color:var(--orange)}
+.list-btn small{color:var(--muted)}
+.list-btn.warnrow{border-left:4px solid var(--warn-line)}
+.big{font-family:var(--font-display);font-size:44px;line-height:1}
+.big small{font-family:var(--font-body);font-size:14px;color:var(--muted)}
+.kbd{display:inline-block;padding:1px 6px;border:1px solid var(--line-strong);border-radius:2px;font-size:11px;font-weight:700;background:var(--bg)}
+.legend-inline{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-top:10px}
+.legend-inline i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px;border:1px solid var(--cell-line)}
+
+/* ───────── Rooms ───────── */
+.room{position:absolute;display:flex;align-items:center;justify-content:center;background:color-mix(in srgb,var(--panel) 82%,transparent);border:2px solid var(--fg);border-radius:var(--radius)}
+.room-n{font-family:var(--font-display);line-height:1;pointer-events:none}
+.room-meta{position:absolute;left:12px;right:12px;bottom:14px;display:flex;justify-content:space-between;gap:8px;font-size:12px;font-weight:700;pointer-events:none}
+.room-meta span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.room-bar{position:absolute;left:0;right:0;bottom:0;height:5px;background:var(--line);pointer-events:none}
+.room-bar i{display:block;height:100%;background:var(--done-line)}
+.room.sel{outline:3px solid var(--orange);outline-offset:3px}
+.handle{position:absolute;width:14px;height:14px;background:var(--orange);border:2px solid #fff;border-radius:2px;z-index:3}
+.handle[data-handle="n"]{left:calc(50% - 7px);top:-8px;cursor:ns-resize}.handle[data-handle="s"]{left:calc(50% - 7px);bottom:-8px;cursor:ns-resize}
+.handle[data-handle="e"]{top:calc(50% - 7px);right:-8px;cursor:ew-resize}.handle[data-handle="w"]{top:calc(50% - 7px);left:-8px;cursor:ew-resize}
+.handle[data-handle="ne"]{top:-8px;right:-8px;cursor:nesw-resize}.handle[data-handle="nw"]{top:-8px;left:-8px;cursor:nwse-resize}
+.handle[data-handle="se"]{bottom:-8px;right:-8px;cursor:nwse-resize}.handle[data-handle="sw"]{bottom:-8px;left:-8px;cursor:nesw-resize}
+
+/* ───────── Racks ───────── */
+.rack{position:absolute;background:var(--panel);border:3px solid var(--frame);border-radius:var(--radius)}
+.rack.sel{outline:3px solid var(--orange);outline-offset:4px}
+.rack-head{height:32px;display:flex;align-items:center;justify-content:space-between;padding:0 10px;background:var(--head);color:#fff;font-size:12px}
+.rack-num{font-family:var(--font-display);font-size:18px;letter-spacing:.02em}
+.shelf{position:relative;height:60px;display:flex;border-bottom:5px solid var(--frame)}
+.shelf.whole{align-items:center;justify-content:center;background:var(--cell);font-size:13px;font-weight:700;overflow:hidden}
+.shelf.has-cells{background:var(--cell)}
+.shelf.sel{box-shadow:inset 0 0 0 3px var(--orange)}
+.shelf-tag{flex:none;width:44px;border:0;border-right:1px solid var(--cell-line);background:var(--tag);font-size:11px;font-weight:700;cursor:pointer;padding:0;position:relative}
+.shelf-tag[data-bulk="1"]{background:var(--done-bg);color:var(--done-fg)}
+.shelf-tag[data-bulk="2"]{background:var(--warn-bg);color:var(--warn-fg)}
+.shelf-tag[data-bulk="p"]{box-shadow:inset 4px 0 0 var(--done-line)}
+.cells{flex:1;display:flex;min-width:0}
+.cell{position:relative;flex:1;min-width:0;display:flex;align-items:center;justify-content:center;border-right:1px solid var(--cell-line);background:var(--cell);font-size:11px;font-weight:700;overflow:hidden}
+.cell:last-child{border-right:0}
+.cell[data-st="1"],.shelf.whole[data-st="1"]{background:var(--done-bg);color:var(--done-fg)}
+.cell[data-st="2"],.shelf.whole[data-st="2"]{background:var(--warn-bg);color:var(--warn-fg)}
+.cell[data-st="1"]::after,.shelf.whole[data-st="1"]::after{content:"✓";position:absolute;top:3px;right:6px;font-size:13px;color:var(--done-line)}
+.cell[data-st="2"]::after,.shelf.whole[data-st="2"]::after{content:"!";position:absolute;top:2px;right:7px;font-size:14px;color:var(--warn-line)}
+.mode-check .cell,.mode-check .shelf.whole,.mode-check .shelf-tag,.mode-check .box,.mode-check .room{cursor:pointer}
+.mode-build .rack,.mode-build .box,.mode-build .room{cursor:move}
+.mode-check .cell:hover,.mode-check .shelf.whole:hover{filter:brightness(.96)}
+
+/* ───────── Boxes ───────── */
+.box{position:absolute;width:104px;height:76px;display:flex;align-items:flex-end;justify-content:center;padding-bottom:9px;background:linear-gradient(#d3ad72,#c19657);border:2px solid #8a6a36;border-radius:2px}
+.box::before{content:"";position:absolute;left:50%;top:0;width:18px;height:100%;transform:translateX(-50%);background:rgba(255,255,255,.26)}
+.box-label{position:relative;z-index:1;min-width:58px;padding:3px 8px;background:#fff;color:#000;border:1px solid #666;font-size:12px;font-weight:700;text-align:center;max-width:92px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.box[data-st="1"]{border-color:var(--done-line);box-shadow:0 0 0 3px var(--done-bg)}
+.box[data-st="1"] .box-label{background:var(--done-bg);border-color:var(--done-line);color:var(--done-fg)}
+.box[data-st="2"]{border-color:var(--warn-line);box-shadow:0 0 0 3px var(--warn-bg)}
+.box[data-st="2"] .box-label{background:var(--warn-bg);border-color:var(--warn-line);color:var(--warn-fg)}
+.box[data-st="1"]::after,.box[data-st="2"]::after{position:absolute;top:2px;right:6px;z-index:2;font-size:14px;font-weight:700}
+.box[data-st="1"]::after{content:"✓";color:var(--done-line)}
+.box[data-st="2"]::after{content:"!";color:var(--warn-line)}
+.box.sel{outline:3px solid var(--orange);outline-offset:4px}
+
+
+/* ───────── Names, pockets, inline rename ───────── */
+.lbl{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:0 4px}
+.shelf-tag{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:0 3px}
+.shelf-row{flex-wrap:wrap}
+.shelf-name{width:84px;padding:5px 7px;border:1px solid var(--line);border-radius:var(--radius);background:var(--bg);font-size:13px;font-weight:700;outline:none}
+.shelf-name:focus,.cell-names input:focus{border-color:var(--orange);box-shadow:0 0 0 2px rgba(249,60,0,.15)}
+.cell-names{display:flex;flex-wrap:wrap;gap:6px;flex-basis:100%;margin-top:8px}
+.cell-names input{flex:1 1 70px;min-width:70px;padding:5px 7px;border:1px solid var(--line);border-radius:var(--radius);background:var(--bg);font-size:12px;font-weight:700;outline:none}
+.inline-edit{position:absolute;z-index:20;padding:0 10px;border:2px solid var(--orange);border-radius:2px;background:var(--panel);color:var(--fg);font:700 14px var(--font-body);text-align:center;outline:none;box-shadow:0 8px 24px rgba(0,0,0,.28)}
+.pockets{position:absolute;padding:28px 6px 6px;background:#80868d;border:2px solid #5d636a;border-radius:3px}
+.pk-top{position:absolute;left:0;right:0;top:0;height:24px;display:flex;align-items:center;justify-content:center;border-bottom:2px solid rgba(0,0,0,.2)}
+.pk-label{max-width:90%;padding:1px 8px;background:#fff;color:#000;border:1px solid #555;font-size:11px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pk-grid{display:grid;gap:6px;height:100%}
+.pk-grid i{display:block;background:#b7bcc2;border:1px solid #5d636a;border-radius:2px 2px 9px 9px}
+.pockets[data-st="1"]{border-color:var(--done-line);box-shadow:0 0 0 3px var(--done-bg)}
+.pockets[data-st="1"] .pk-grid i{background:var(--done-bg);border-color:var(--done-line)}
+.pockets[data-st="2"]{border-color:var(--warn-line);box-shadow:0 0 0 3px var(--warn-bg)}
+.pockets[data-st="2"] .pk-grid i{background:var(--warn-bg);border-color:var(--warn-line)}
+.pockets[data-st="1"]::after,.pockets[data-st="2"]::after{position:absolute;top:2px;right:7px;font-size:15px;font-weight:700;background:var(--panel);border-radius:50%;width:19px;height:19px;line-height:19px;text-align:center}
+.pockets[data-st="1"]::after{content:"✓";color:var(--done-line)}
+.pockets[data-st="2"]::after{content:"!";color:var(--warn-line)}
+.pockets.sel{outline:3px solid var(--orange);outline-offset:4px}
+.mode-check .pockets{cursor:pointer}
+.mode-build .pockets{cursor:move}
+
+/* animations */
+.pop{animation:pop .32s ease;z-index:3}
+.locate-ring{position:absolute;z-index:60;pointer-events:none;border:3px solid var(--orange);border-radius:5px;background:rgba(249,60,0,.12);
+  animation:ring 1s ease-out 3,ringout .5s ease 3.4s forwards}
+@keyframes ring{0%{box-shadow:0 0 0 0 rgba(249,60,0,.7)}100%{box-shadow:0 0 0 22px rgba(249,60,0,0)}}
+@keyframes ringout{to{opacity:0}}
+@keyframes pop{0%{transform:scale(.93)}60%{transform:scale(1.04)}100%{transform:scale(1)}}
+
+/* zoom/stage buttons overlay */
+.stage-help{position:absolute;left:14px;bottom:12px;font-size:12px;color:var(--muted);pointer-events:none;background:color-mix(in srgb,var(--canvas) 85%,transparent);padding:3px 8px;border-radius:2px}
+
+/* ───────── Toast / Modal ───────── */
+#toast{position:fixed;left:50%;bottom:calc(22px + env(safe-area-inset-bottom,0px));transform:translate(-50%,16px);display:flex;align-items:center;gap:14px;background:#000;color:#fff;padding:11px 16px;border-radius:var(--radius);font-size:13px;opacity:0;pointer-events:none;transition:opacity .22s,transform .22s;z-index:200;max-width:92vw;border:1px solid rgba(255,255,255,.2)}
+#toast.show{opacity:1;transform:translate(-50%,0);pointer-events:auto}
+#toast button{background:none;border:0;color:var(--green);font-weight:700;cursor:pointer;font-size:13px}
+.modal-back{position:fixed;inset:0;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:20px;z-index:150}
+.modal{width:min(560px,100%);max-height:90%;overflow:auto;background:var(--panel);border:1px solid var(--line-strong);border-radius:var(--radius);padding:24px;animation:fadein .2s ease}
+@keyframes fadein{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.modal h2{margin:0 0 6px;font-family:var(--font-display);font-weight:400;font-size:28px;line-height:1.1}
+.modal .lead{margin:0 0 16px;color:var(--muted);font-size:13px}
+.modal-actions{display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap;margin-top:18px}
+.modal textarea.json{width:100%;min-height:150px;padding:10px;border:1px solid var(--line-strong);background:var(--bg);border-radius:var(--radius);font:12px/1.4 monospace;resize:vertical}
+.drop{display:block;padding:22px;border:2px dashed var(--line-strong);border-radius:var(--radius);text-align:center;color:var(--muted);cursor:pointer;margin-bottom:12px;transition:border-color .2s,background .2s}
+.drop:hover,.drop.over{border-color:var(--orange);background:rgba(249,60,0,.05);color:var(--fg)}
+.steps{margin:0;padding:0;list-style:none;display:grid;gap:12px}
+.steps li{display:grid;grid-template-columns:34px 1fr;gap:12px;align-items:start}
+.steps .n{width:34px;height:34px;border-radius:50%;background:var(--btn-bg);color:var(--btn-fg);display:flex;align-items:center;justify-content:center;font-family:var(--font-display);font-size:16px}
+.steps b{display:block}.steps span{font-size:13px;color:var(--muted)}
+.sumline{display:flex;gap:16px;flex-wrap:wrap;font-size:13px;color:var(--muted);margin-bottom:12px}
+.sumline b{color:var(--fg)}
+
+@media (max-width:860px){
+  #home{grid-template-columns:1fr}
+  .home-hero{padding:36px 24px}.home-menu{padding:24px;max-width:none}
+  .demo{display:none}
+  .topbar{height:auto;min-height:52px;padding:8px 12px;gap:10px;flex-wrap:nowrap}.brand svg,.vsep{display:none}
+  .crumbs{flex:1 1 0;min-width:0;overflow:hidden}.crumbs .cur{overflow:hidden;text-overflow:ellipsis}
+  .grow{display:none}.save-ind{display:none}
+  .btn .long{display:none}.btn .short{display:inline}
+  #ws{grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto minmax(0,1fr) auto}
+  .inspector{grid-column:1;grid-row:4;border-left:0;border-top:1px solid var(--line);max-height:42vh}
+  #ws.panel-closed .inspector{display:none}
+  .panel-toggle{display:inline-flex}
+  .search input{width:110px}
+  .stage-help{display:none}
+}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div id="app">
+  <header class="topbar">
+    <button class="brand" data-act="home" aria-label="На главную"><span class="logo"><svg aria-label="Lamoda" role="img" width="623" height="103" viewBox="0 0 623 103" xmlns="http://www.w3.org/2000/svg" fill="none"><path d="M109.568 32.0745H109.146C104.141 23.9152 94.1132 18.6096 81.2111 18.6096 56.8739 18.6096 41.54 35.933 41.54 60.5717 41.54 85.2103 56.8739 102.534 81.2111 102.534 94.0931 102.534 104.121 97.2282 109.146 89.0689H109.568V100.243H130.468V20.9007H109.568V32.0745ZM86.4965 85.351C69.3138 85.351 63.1441 77.4731 63.1441 60.5717 63.1441 43.6703 69.2937 35.7924 86.4965 35.7924 103.699 35.7924 109.849 43.6703 109.849 60.5717 109.849 77.4731 103.699 85.351 86.4965 85.351Z" fill="currentColor"/><path d="M21.2021 0H0V100.243H21.2021V0Z" fill="currentColor"/><path d="M265.82 18.6096C249.783 18.6096 240.478 24.8999 234.75 33.5013H234.469C229.445 24.7592 219.859 18.6096 205.831 18.6096 192.949 18.6096 182.921 23.9152 177.897 32.0745H177.475V20.9007H156.574V100.243H177.475V55.8489C177.475 41.8214 183.202 35.7924 197.391 35.7924 211.579 35.7924 217.306 41.8013 217.306 55.8489V100.243H238.207V55.8489C238.207 41.8214 243.935 35.7924 258.103 35.7924 272.271 35.7924 278.019 41.8013 278.019 55.8489V100.243H298.919V49.8199C298.919 31.2103 286.6 18.6096 265.84 18.6096H265.82Z" fill="currentColor"/><path d="M362.908 18.6096C335.837 18.6096 317.509 36.2144 317.509 60.5717 317.509 84.929 335.837 102.534 362.908 102.534 389.978 102.534 408.306 84.9089 408.306 60.5717 408.306 36.2345 389.978 18.6096 362.908 18.6096ZM362.908 85.351C345.725 85.351 339.274 77.4731 339.274 60.5717 339.274 43.6703 345.725 35.7924 362.908 35.7924 380.09 35.7924 386.541 43.6703 386.541 60.5717 386.541 77.4731 380.09 85.351 362.908 85.351Z" fill="currentColor"/><path d="M493.094 32.0745H492.672C487.668 23.9152 477.64 18.6096 464.738 18.6096 440.381 18.6096 425.067 35.933 425.067 60.5717 425.067 85.2103 440.381 102.534 464.738 102.534 477.62 102.534 487.648 97.2282 492.672 89.0689H493.094V100.243H513.995V0H493.094V32.0745ZM470.043 85.351C452.861 85.351 446.691 77.4731 446.691 60.5717 446.691 43.6703 452.841 35.7924 470.043 35.7924 487.246 35.7924 493.396 43.6703 493.396 60.5717 493.396 77.4731 487.226 85.351 470.043 85.351Z" fill="currentColor"/><path d="M602.099 20.9007V32.0745H601.677C596.673 23.9152 586.645 18.6096 573.743 18.6096 549.406 18.6096 534.072 35.933 534.072 60.5717 534.072 85.2103 549.385 102.534 573.743 102.534 586.625 102.534 596.653 97.2282 601.677 89.0689H602.099V100.243H623V20.9007H602.099ZM579.028 85.351C561.846 85.351 555.676 77.4731 555.676 60.5717 555.676 43.6703 561.825 35.7924 579.028 35.7924 596.231 35.7924 602.381 43.6703 602.381 60.5717 602.381 77.4731 596.231 85.351 579.028 85.351Z" fill="currentColor"/></svg></span><span class="vsep"></span><span class="brand-name">Locus</span></button>
+    <nav class="crumbs" id="crumbs" aria-label="Путь"></nav>
+    <span class="grow"></span>
+    <span class="save-ind" id="saveInd"></span>
+    <span id="topActions" class="tb-grp"></span>
+  </header>
+
+  <!-- ───────── Home ───────── -->
+  <main id="home">
+    <section class="home-hero">
+      <div>
+        <h1>Locus</h1>
+        <p>Адресное хранение ПВЗ. Смена закончилась — следующая сразу видит, где всё уже сделано.</p>
+      </div>
+      <svg class="demo" viewBox="0 0 260 300" aria-hidden="true">
+        <rect class="frame" x="8" y="8" width="244" height="284"/>
+        <rect class="dc" style="animation-delay:-0.2s" x="14" y="14" width="232" height="46"/>
+        <rect class="dc" style="animation-delay:-1.4s" x="14" y="66" width="76" height="46"/>
+        <rect class="dc" style="animation-delay:-2.6s" x="92" y="66" width="76" height="46"/>
+        <rect class="dc" style="animation-delay:-3.8s" x="170" y="66" width="76" height="46"/>
+        <rect class="dc" style="animation-delay:-5.0s" x="14" y="118" width="76" height="46"/>
+        <rect class="dc" style="animation-delay:-0.8s" x="92" y="118" width="76" height="46"/>
+        <rect class="dc" style="animation-delay:-2.0s" x="170" y="118" width="76" height="46"/>
+        <rect class="dc" style="animation-delay:-3.2s" x="14" y="170" width="232" height="46"/>
+        <rect class="dc" style="animation-delay:-4.4s" x="14" y="222" width="76" height="46"/>
+        <rect class="dc" style="animation-delay:-5.6s" x="92" y="222" width="76" height="46"/>
+        <rect class="dc" style="animation-delay:-6.5s" x="170" y="222" width="76" height="46"/>
+      </svg>
+      <div class="legend"><span><i style="background:#d9fcab"></i>Готово</span><span><i style="background:#f93c00"></i>Нужно внимание</span><span><i style="background:rgba(255,255,255,.2)"></i>Не проверено</span></div>
+    </section>
+    <section class="home-menu">
+      <button class="menu-btn primary" id="btnContinue" data-act="continue"><span><strong>Продолжить</strong><small id="contSub">Нет сохранённых пространств</small></span><span class="arrow">→</span></button>
+      <button class="menu-btn" data-act="new-space"><span><strong>Новое пространство</strong><small>Комнаты, стеллажи, коробки — построить склад с нуля</small></span><span class="arrow">+</span></button>
+      <button class="menu-btn" data-act="import"><span><strong>Загрузить сохранение</strong><small>JSON-файл от предыдущей смены</small></span><span class="arrow">↑</span></button>
+      <button class="menu-btn" data-act="help"><span><strong>Как это работает</strong><small>Минута, чтобы разобраться</small></span><span class="arrow">?</span></button>
+      <div class="saved" id="savedList"></div>
+    </section>
+  </main>
+
+  <!-- ───────── Workspace ───────── -->
+  <section id="ws" hidden>
+    <div class="notebar" id="noteBar" hidden></div>
+    <div class="toolbar" id="toolbar">
+      <div class="tb-grp" id="tbLeft"></div>
+      <form class="search tb-grp" id="searchForm" autocomplete="off"><input id="searchInp" type="text" placeholder="Адрес: 2-3-1" aria-label="Найти адрес"></form>
+      <span class="grow"></span>
+      <div class="tb-grp" id="tbRight"></div>
+    </div>
+    <div class="stage" id="stage">
+      <div class="world" id="world"></div>
+      <div class="empty-hint" id="emptyHint" hidden></div>
+      <div class="stage-help" id="stageHelp">Перетаскивание — сдвиг · Ctrl + колесо — масштаб</div>
+    </div>
+    <aside class="inspector" id="inspector"></aside>
+  </section>
+</div>
+<div id="toast" role="status" aria-live="polite"><span id="toastMsg"></span><button id="toastBtn" hidden></button></div>
+<div id="modalRoot"></div>
+
+<script>
+(function () {
+'use strict';
+
+/* ═════════════ Константы и утилиты ═════════════ */
+var STORE_KEY = 'locus:v1';
+var GRID = 20, SNAP = 10, SHELF_H = 60, HEAD_H = 32, BOX_W = 104, BOX_H = 76;
+var CELL_OPTS = [0, 2, 3, 4, 5, 6];
+
+var $ = function (s, r) { return (r || document).querySelector(s); };
+var $$ = function (s, r) { return Array.prototype.slice.call((r || document).querySelectorAll(s)); };
+var esc = function (s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]; }); };
+var uid = function () { return Math.random().toString(36).slice(2, 8) + Date.now().toString(36).slice(-4); };
+var clamp = function (v, a, b) { return Math.min(b, Math.max(a, v)); };
+var snapTo = function (v, g) { g = g || SNAP; return Math.round(v / g) * g; };
+var toNum = function (v, d) { v = +v; return isFinite(v) ? v : (d || 0); };
+var fmtDate = function (ts) { try { return new Date(ts).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }); } catch (e) { return ''; } };
+function plural(n, a, b, c) { var m = Math.abs(n) % 100, m1 = m % 10; if (m > 10 && m < 20) return c; if (m1 > 1 && m1 < 5) return b; if (m1 === 1) return a; return c; }
+
+/* ═════════════ Хранилище (локально в браузере) ═════════════ */
+var mem = { spaces: {}, last: null, quick: { shelves: 5, cells: 3, qty: 1, w: 240, prows: 4, pcols: 4 } };
+var saveFailed = false, saveTimer = null;
+
+function loadStore() {
+  try {
+    var raw = localStorage.getItem(STORE_KEY);
+    if (!raw) return;
+    var j = JSON.parse(raw);
+    if (j && j.spaces) {
+      Object.keys(j.spaces).forEach(function (id) {
+        var sp = normalizeSpace(j.spaces[id]);
+        if (sp) mem.spaces[sp.id] = sp;
+      });
+      mem.last = mem.spaces[j.last] ? j.last : null;
+    }
+    if (j && j.quick) mem.quick = Object.assign(mem.quick, j.quick);
+  } catch (e) { /* пустое/битое хранилище — начинаем с нуля */ }
+}
+function persist() {
+  try { localStorage.setItem(STORE_KEY, JSON.stringify(mem)); saveFailed = false; S.savedAt = Date.now(); }
+  catch (e) { saveFailed = true; }
+  updateSaveInd();
+}
+function scheduleSave() { clearTimeout(saveTimer); saveTimer = setTimeout(persist, 250); }
+function updateSaveInd() {
+  var el = $('#saveInd'); if (!el) return;
+  if (saveFailed) { el.className = 'save-ind bad'; el.textContent = 'Не сохраняется в браузере — скачайте файл'; return; }
+  el.className = 'save-ind';
+  el.textContent = S.screen === 'home' || !S.savedAt ? '' : 'Сохранено локально · ' + new Date(S.savedAt).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+}
+
+/* ═════════════ Модель данных ═════════════ */
+function newShelf(cells) { return cells ? { cells: cells, st: 0, cs: new Array(cells).fill(0), label: '', names: new Array(cells).fill('') } : { cells: 0, st: 0, cs: [], label: '', names: [] }; }
+function newSpace(name) { return { id: uid(), name: name || 'Новое пространство', note: '', createdAt: Date.now(), updatedAt: Date.now(), roomSeq: 0, rooms: [] }; }
+function stOf(v) { v = toNum(v); return v === 1 || v === 2 ? v : 0; }
+
+function normalizeSpace(raw) {
+  if (!raw || typeof raw !== 'object' || !Array.isArray(raw.rooms)) return null;
+  var sp = { id: String(raw.id || uid()).slice(0, 40), name: String(raw.name || 'Пространство').slice(0, 80), note: String(raw.note || '').slice(0, 2000),
+    createdAt: toNum(raw.createdAt, Date.now()), updatedAt: toNum(raw.updatedAt, Date.now()), roomSeq: 0, rooms: [] };
+  var maxN = 0, lab = function (v) { return String(v == null ? '' : v).slice(0, 24); };
+  raw.rooms.slice(0, 60).forEach(function (r, ri) {
+    if (!r || typeof r !== 'object') return;
+    var n = Math.max(1, Math.round(toNum(r.n, ri + 1))); maxN = Math.max(maxN, n);
+    var room = { id: String(r.id || uid()).slice(0, 40), n: n, name: String(r.name || '').slice(0, 60),
+      x: snapTo(toNum(r.x), GRID), y: snapTo(toNum(r.y), GRID), w: Math.max(100, snapTo(toNum(r.w, 240), GRID)), h: Math.max(100, snapTo(toNum(r.h, 200), GRID)), racks: [], boxes: [], pockets: [] };
+    (Array.isArray(r.racks) ? r.racks : []).slice(0, 300).forEach(function (k) {
+      if (!k || typeof k !== 'object') return;
+      var rack = { id: String(k.id || uid()).slice(0, 40), num: Math.max(1, Math.round(toNum(k.num, 1))), label: lab(k.label), sd: k.sd === 'u' ? 'u' : 'd', cd: k.cd === 'r' ? 'r' : 'l',
+        x: snapTo(toNum(k.x), SNAP), y: snapTo(toNum(k.y), SNAP), w: clamp(snapTo(toNum(k.w, 240), GRID), 160, 420), shelves: [] };
+      (Array.isArray(k.shelves) ? k.shelves : []).slice(0, 20).forEach(function (s) {
+        s = s || {}; var c = Math.round(toNum(s.cells)); c = c >= 2 ? clamp(c, 2, 6) : 0;
+        var sh = newShelf(c); sh.label = lab(s.label);
+        if (c) { var src = Array.isArray(s.cs) ? s.cs : [], nm = Array.isArray(s.names) ? s.names : []; sh.cs = sh.cs.map(function (_, i) { return stOf(src[i]); }); sh.names = sh.names.map(function (_, i) { return lab(nm[i]); }); } else sh.st = stOf(s.st);
+        rack.shelves.push(sh);
+      });
+      if (!rack.shelves.length) rack.shelves.push(newShelf(0));
+      room.racks.push(rack);
+    });
+    (Array.isArray(r.boxes) ? r.boxes : []).slice(0, 300).forEach(function (b) {
+      if (!b || typeof b !== 'object') return;
+      room.boxes.push({ id: String(b.id || uid()).slice(0, 40), label: lab(b.label) || 'Короб', x: snapTo(toNum(b.x), SNAP), y: snapTo(toNum(b.y), SNAP), st: stOf(b.st) });
+    });
+    (Array.isArray(r.pockets) ? r.pockets : []).slice(0, 100).forEach(function (b) {
+      if (!b || typeof b !== 'object') return;
+      room.pockets.push({ id: String(b.id || uid()).slice(0, 40), label: lab(b.label) || 'Кармашки', x: snapTo(toNum(b.x), SNAP), y: snapTo(toNum(b.y), SNAP),
+        rows: clamp(Math.round(toNum(b.rows, 4)), 1, 8), cols: clamp(Math.round(toNum(b.cols, 4)), 1, 8), st: stOf(b.st) });
+    });
+    sp.rooms.push(room);
+  });
+  sp.roomSeq = Math.max(maxN, Math.round(toNum(raw.roomSeq)));
+  return sp;
+}
+
+function rackH(r) { return HEAD_H + r.shelves.length * SHELF_H + 6; }
+function pocketW(p) { return p.cols * 40 + 10; }
+function pocketH(p) { return p.rows * 52 + 28; }
+
+/* Названия. По умолчанию подпись собирается из номеров (2-3-1) и каскадом
+   следует за стеллажом и полкой, но любую подпись можно заменить вручную —
+   чтобы на плане было ровно то, что написано на реальной наклейке. */
+function rackLabel(r) { return r.label || String(r.num); }
+function shelfNum(r, i) { return r.sd === 'u' ? r.shelves.length - i : i + 1; }
+function cellNum(r, sh, j) { return r.cd === 'r' ? sh.cells - j : j + 1; }
+function shelfDefault(r, i) { return rackLabel(r) + '-' + shelfNum(r, i); }
+function shelfAddr(r, i) { return r.shelves[i].label || shelfDefault(r, i); }
+function cellDefault(r, i, j) { return shelfAddr(r, i) + '-' + cellNum(r, r.shelves[i], j); }
+function cellAddr(r, i, j) { var n = r.shelves[i].names; return (n && n[j]) || cellDefault(r, i, j); }
+function hasCustomNames(r) { return r.shelves.some(function (sh) { return sh.label || (sh.names || []).some(Boolean); }); }
+
+function unitsOf(sh) { return sh.cells ? sh.cs : [sh.st]; }
+function tally(list) { var t = 0, d = 0, w = 0; list.forEach(function (v) { t++; if (v === 1) d++; else if (v === 2) w++; }); return { t: t, d: d, w: w }; }
+function rackStats(r) { var a = []; r.shelves.forEach(function (sh) { a = a.concat(unitsOf(sh)); }); return tally(a); }
+function roomStats(room) {
+  var a = []; room.racks.forEach(function (r) { r.shelves.forEach(function (sh) { a = a.concat(unitsOf(sh)); }); });
+  room.boxes.forEach(function (b) { a.push(b.st); }); room.pockets.forEach(function (p) { a.push(p.st); }); return tally(a);
+}
+function spaceStats(sp) { var s = { t: 0, d: 0, w: 0 }; sp.rooms.forEach(function (r) { var x = roomStats(r); s.t += x.t; s.d += x.d; s.w += x.w; }); return s; }
+function nextRackNum(sp) { var m = 0; sp.rooms.forEach(function (r) { r.racks.forEach(function (k) { m = Math.max(m, k.num); }); }); return m + 1; }
+function isDupNum(rack) { var c = 0, l = rackLabel(rack); S.space.rooms.forEach(function (r) { r.racks.forEach(function (k) { if (rackLabel(k) === l) c++; }); }); return c > 1; }
+function shelfState(sh) { if (!sh.cells) return sh.st; if (sh.cs.some(function (v) { return v === 2; })) return 2; if (sh.cs.every(function (v) { return v === 1; })) return 1; return 0; }
+function setCells(sh, n) {
+  if (n === sh.cells) return;
+  if (n === 0) { sh.st = shelfState(sh); sh.cells = 0; sh.cs = []; sh.names = []; return; }
+  if (sh.cells) { var old = sh.cs, on = sh.names || []; sh.cs = Array.from({ length: n }, function (_, i) { return old[i] || 0; }); sh.names = Array.from({ length: n }, function (_, i) { return on[i] || ''; }); }
+  else { sh.cs = new Array(n).fill(sh.st); sh.names = new Array(n).fill(''); }
+  sh.cells = n; sh.st = 0;
+}
+function attention() {
+  var out = [];
+  S.space.rooms.forEach(function (room) {
+    room.racks.forEach(function (r) { r.shelves.forEach(function (sh, i) {
+      if (sh.cells) sh.cs.forEach(function (v, j) { if (v === 2) out.push({ room: room, addr: cellAddr(r, i, j), key: 'c:' + r.id + ':' + i + ':' + j }); });
+      else if (sh.st === 2) out.push({ room: room, addr: shelfAddr(r, i), key: 's:' + r.id + ':' + i });
+    }); });
+    room.boxes.forEach(function (b) { if (b.st === 2) out.push({ room: room, addr: b.label, key: 'b:' + b.id }); });
+    room.pockets.forEach(function (p) { if (p.st === 2) out.push({ room: room, addr: p.label, key: 'p:' + p.id }); });
+  });
+  return out;
+}
+
+/* ═════════════ Состояние приложения ═════════════ */
+var S = { screen: 'home', space: null, roomId: null, mode: 'build', sel: null, views: {}, undo: [], redo: [], flash: null, pulse: null, panel: window.innerWidth > 860, savedAt: null, attnIdx: 0, dupN: 1, boxLabel: '', pocketLabel: '', dive: false };
+var caps = { downloads: null };
+try { if (window.claude && window.claude.use) window.claude.use('downloads').then(function (d) { caps.downloads = d || null; }).catch(function () {}); } catch (e) {}
+
+function curRoom() { return S.space && S.space.rooms.find(function (r) { return r.id === S.roomId; }); }
+function snapshot() { return JSON.stringify(S.space); }
+function pushUndo(snap) { S.undo.push(snap || snapshot()); if (S.undo.length > 120) S.undo.shift(); S.redo.length = 0; }
+function touch() { S.space.updatedAt = Date.now(); mem.spaces[S.space.id] = S.space; mem.last = S.space.id; scheduleSave(); }
+function mutate(fn) { pushUndo(); fn(); touch(); render(); }
+function restore(snap) { S.space = JSON.parse(snap); mem.spaces[S.space.id] = S.space; if (S.screen === 'room' && !curRoom()) S.screen = 'space'; S.sel = null; touch(); render(); }
+function undo() { if (!S.undo.length) return; S.redo.push(snapshot()); restore(S.undo.pop()); }
+function redo() { if (!S.redo.length) return; S.undo.push(snapshot()); restore(S.redo.pop()); }
+
+/* ═════════════ Тост и модалки ═════════════ */
+var toastT = null;
+function toast(msg, action) {
+  $('#toastMsg').textContent = msg; var b = $('#toastBtn');
+  if (action) { b.hidden = false; b.textContent = action.text; b.onclick = function () { action.fn(); hideToast(); }; } else { b.hidden = true; b.onclick = null; }
+  $('#toast').classList.add('show'); clearTimeout(toastT); toastT = setTimeout(hideToast, action ? 6000 : 2600);
+}
+function hideToast() { $('#toast').classList.remove('show'); }
+
+var modalOpen = false;
+function openModal(o) {
+  closeModal();
+  var back = document.createElement('div'); back.className = 'modal-back';
+  back.innerHTML = '<div class="modal" role="dialog" aria-modal="true" aria-label="' + esc(o.title) + '"><h2>' + esc(o.title) + '</h2>' + (o.lead ? '<p class="lead">' + o.lead + '</p>' : '') + (o.html || '') +
+    '<div class="modal-actions">' + (o.buttons || []).map(function (b, i) { return '<button class="btn ' + (b.kind || '') + '" data-mb="' + i + '">' + esc(b.text) + '</button>'; }).join('') + '</div></div>';
+  $('#modalRoot').appendChild(back); modalOpen = true;
+  back.addEventListener('mousedown', function (e) { if (e.target === back) closeModal(); });
+  $$('[data-mb]', back).forEach(function (btn) { btn.addEventListener('click', function () { var b = o.buttons[+btn.dataset.mb]; var r = b.fn ? b.fn(back) : undefined; if (r !== false) closeModal(); }); });
+  if (o.onOpen) o.onOpen(back);
+  return back;
+}
+function closeModal() { $('#modalRoot').innerHTML = ''; modalOpen = false; }
+function ask(title, text, okText, danger) {
+  return new Promise(function (res) {
+    openModal({ title: title, lead: text, buttons: [{ text: 'Отмена', fn: function () { res(false); } }, { text: okText || 'Ок', kind: danger ? 'danger' : 'primary', fn: function () { res(true); } }] });
+  });
+}
+
+/* ═════════════ Вид: масштаб и сдвиг ═════════════ */
+var stage = $('#stage'), world = $('#world');
+function viewKey() { return S.screen === 'room' ? S.roomId : 'space'; }
+function view() { var k = viewKey(); return S.views[k] || (S.views[k] = { x: 60, y: 60, k: 1, fit: false }); }
+function applyView() {
+  var v = view();
+  world.style.transform = 'translate(' + v.x + 'px,' + v.y + 'px) scale(' + v.k + ')';
+  stage.style.backgroundSize = (GRID * v.k) + 'px ' + (GRID * v.k) + 'px';
+  stage.style.backgroundPosition = v.x + 'px ' + v.y + 'px';
+  var z = $('#zoomLbl'); if (z) z.textContent = Math.round(v.k * 100) + '%';
+}
+function contentRects() {
+  if (S.screen === 'space') return S.space.rooms.map(function (r) { return { x: r.x, y: r.y, w: r.w, h: r.h }; });
+  var room = curRoom(); return room ? roomRects(room) : [];
+}
+function fitView() {
+  var v = view(), rs = contentRects(), W = stage.clientWidth || 800, H = stage.clientHeight || 500;
+  v.fit = true;
+  if (!rs.length) { v.k = 1; v.x = 60; v.y = 60; applyView(); return; }
+  var x0 = Math.min.apply(null, rs.map(function (r) { return r.x; })), y0 = Math.min.apply(null, rs.map(function (r) { return r.y; }));
+  var x1 = Math.max.apply(null, rs.map(function (r) { return r.x + r.w; })), y1 = Math.max.apply(null, rs.map(function (r) { return r.y + r.h; }));
+  var pad = 50, bw = x1 - x0, bh = y1 - y0;
+  var fitK = Math.min((W - pad * 2) / bw, (H - pad * 2) / bh), minK = W < 600 ? 0.6 : 0.25;
+  v.k = clamp(fitK, minK, 1.4);
+  if (fitK < minK) { v.x = 16 - x0 * v.k; v.y = 16 - y0 * v.k; }          // слишком крупно для экрана — читаемый масштаб, начало слева сверху
+  else { v.x = (W - bw * v.k) / 2 - x0 * v.k; v.y = (H - bh * v.k) / 2 - y0 * v.k; }
+  applyView();
+}
+function zoomAt(cx, cy, nk) {
+  var v = view(), r = stage.getBoundingClientRect(), px = cx - r.left, py = cy - r.top;
+  nk = clamp(nk, 0.2, 2.5); var wx = (px - v.x) / v.k, wy = (py - v.y) / v.k;
+  v.k = nk; v.x = px - wx * nk; v.y = py - wy * nk; applyView();
+}
+function zoomBy(f) { var r = stage.getBoundingClientRect(); zoomAt(r.left + r.width / 2, r.top + r.height / 2, view().k * f); }
+function fitWasClamped() { var v = view(); return v.k <= 0.6001; }
+function revealSel() {
+  requestAnimationFrame(function () {
+    requestAnimationFrame(function () {
+      if (!S.sel) return;
+      var sel = { room: '.room', rack: '.rack', box: '.box', pocket: '.pockets' }[S.sel.type];
+      var el = world.querySelector(sel + '[data-id="' + S.sel.id + '"]'); if (!el) return;
+      var sr = stage.getBoundingClientRect(), er = el.getBoundingClientRect(), m = 24;
+      var dx = 0, dy = 0;
+      if (er.left < sr.left + m) dx = sr.left + m - er.left; else if (er.right > sr.right - m) dx = sr.right - m - er.right;
+      if (er.top < sr.top + m) dy = sr.top + m - er.top; else if (er.bottom > sr.bottom - m) dy = sr.bottom - m - er.bottom;
+      if (!dx && !dy) return;
+      var v = view(), prev = { x: v.x, y: v.y, k: v.k };
+      glide(); fitView();                       // сначала пробуем показать всё содержимое
+      if (v.k < (stage.clientWidth < 600 ? 0.6 : 0.5) || (stage.clientWidth < 600 && fitWasClamped())) { v.k = prev.k; v.x = prev.x + dx; v.y = prev.y + dy; applyView(); }   // слишком мелко — просто подвинем к новому
+    });
+  });
+}
+function glide() { world.classList.add('glide'); setTimeout(function () { world.classList.remove('glide'); }, 420); }
+
+/* ═════════════ Рендер ═════════════ */
+function render() {
+  if (S.screen !== 'home' && !S.space) S.screen = 'home';
+  validateSel();
+  if (S.screen === 'home') { $('#home').hidden = false; $('#ws').hidden = true; renderHome(); }
+  else { $('#home').hidden = true; $('#ws').hidden = false; renderWorkspace(); }
+  renderTop();
+}
+function validateSel() {
+  if (!S.sel || !S.space) return;
+  var ok = false;
+  if (S.sel.type === 'room') ok = S.screen === 'space' && S.space.rooms.some(function (r) { return r.id === S.sel.id; });
+  else { var room = curRoom(); if (room && S.screen === 'room') { var list = S.sel.type === 'rack' ? room.racks : S.sel.type === 'box' ? room.boxes : room.pockets; ok = list.some(function (x) { return x.id === S.sel.id; }); } }
+  if (!ok) S.sel = null;
+}
+
+function renderTop() {
+  var c = $('#crumbs'), a = $('#topActions'), html = '';
+  if (S.screen === 'space') html = '<span class="cur">' + esc(S.space.name) + '</span>';
+  else if (S.screen === 'room') { var rm = curRoom(); html = '<button data-act="nav-space">' + esc(S.space.name) + '</button><span>›</span><span class="cur">Комната ' + rm.n + (rm.name ? ' · ' + esc(rm.name) : '') + '</span>'; }
+  c.innerHTML = html;
+  a.innerHTML = S.screen === 'home' ? '' : '<button class="btn" data-act="import" aria-label="Загрузить сохранение"><span class="long">Загрузить</span><span class="short">↑</span></button><button class="btn primary" data-act="save-file"><span class="long">Сохранить в файл</span><span class="short">Сохранить</span></button>';
+  updateSaveInd();
+}
+
+function renderHome() {
+  var list = Object.keys(mem.spaces).map(function (id) { return mem.spaces[id]; }).sort(function (a, b) { return b.updatedAt - a.updatedAt; });
+  var last = mem.spaces[mem.last] || list[0];
+  $('#btnContinue').disabled = !last;
+  $('#contSub').textContent = last ? last.name + ' · ' + (function (s) { return s.t ? s.d + ' из ' + s.t + ' отмечено' : 'пока пусто'; })(spaceStats(last)) + ' · ' + fmtDate(last.updatedAt) : 'Нет сохранённых пространств';
+  $('#savedList').innerHTML = list.length ? '<h2>Сохранено на этом устройстве</h2>' + list.map(function (sp) {
+    var s = spaceStats(sp), pr = s.t ? Math.round(s.d / s.t * 100) : 0;
+    return '<div class="saved-row"><div class="meta"><b>' + esc(sp.name) + '</b><small>' + sp.rooms.length + ' ' + plural(sp.rooms.length, 'комната', 'комнаты', 'комнат') + ' · ' + s.d + '/' + s.t + (s.w ? ' · ! ' + s.w : '') + ' · ' + fmtDate(sp.updatedAt) + '</small><div class="bar"><i style="width:' + pr + '%"></i></div></div>' +
+      '<button class="btn" data-act="open-space" data-id="' + sp.id + '">Открыть</button><button class="icon-btn" data-act="del-space" data-id="' + sp.id + '" title="Удалить" aria-label="Удалить">×</button></div>';
+  }).join('') : '';
+}
+
+function renderWorkspace() {
+  var ws = $('#ws'); ws.classList.toggle('panel-closed', !S.panel);
+  stage.className = 'stage mode-' + S.mode + (S.dive ? ' dive' : '');
+  if (S.dive) { S.dive = false; setTimeout(function () { stage.classList.remove('dive'); }, 420); }
+  renderNote(); renderToolbar(); renderWorld(); renderInspector();
+  if (!view().fit) requestAnimationFrame(fitView); else applyView();
+}
+function renderNote() {
+  var bar = $('#noteBar');
+  if (S.noteVisible && S.space.note) { bar.hidden = false; bar.innerHTML = '<b>Заметка смене</b><span>' + esc(S.space.note) + '</span><button data-act="close-note" aria-label="Закрыть">×</button>'; }
+  else bar.hidden = true;
+}
+function renderToolbar() {
+  var inRoom = S.screen === 'room', build = S.mode === 'build', sp = spaceStats(S.space);
+  $('#tbLeft').innerHTML = '<div class="seg" role="group" aria-label="Режим"><button data-act="mode" data-v="build" class="' + (build ? 'on' : '') + '">Строить</button><button data-act="mode" data-v="check" class="' + (!build ? 'on' : '') + '">Проверка</button></div>' +
+    (build ? (inRoom ? '<button class="btn" data-act="add-rack">+ Стеллаж</button><button class="btn" data-act="add-box">+ Коробка</button><button class="btn" data-act="add-pocket">+ Кармашки</button>' : '<button class="btn" data-act="add-room">+ Комната</button>') : '') +
+    '<button class="icon-btn" data-act="undo" title="Отменить (Ctrl+Z)" aria-label="Отменить"' + (S.undo.length ? '' : ' disabled') + '>↶</button><button class="icon-btn" data-act="redo" title="Повторить (Ctrl+Shift+Z)" aria-label="Повторить"' + (S.redo.length ? '' : ' disabled') + '>↷</button>';
+  $('#tbRight').innerHTML = (sp.w ? '<button class="chip warn" data-act="attn" title="Перейти к следующей ячейке с вниманием">! ' + sp.w + '</button>' : '') +
+    '<span class="chip ' + (sp.t && sp.d === sp.t ? 'ok' : '') + '">✓ ' + sp.d + ' / ' + sp.t + '</span>' +
+    '<button class="icon-btn" data-act="zoom-out" aria-label="Уменьшить">−</button><span class="zoom-lbl" id="zoomLbl">100%</span><button class="icon-btn" data-act="zoom-in" aria-label="Увеличить">+</button><button class="icon-btn" data-act="fit" title="Показать всё" aria-label="Показать всё">⤢</button>' +
+    '<button class="btn panel-toggle" data-act="panel">' + (S.panel ? 'Скрыть панель' : 'Панель') + '</button>';
+}
+
+function flashCls(key) { return S.flash === key ? ' pop' : ''; }
+function worldHTML() {
+  if (S.screen === 'space') {
+    return S.space.rooms.map(function (r) {
+      var st = roomStats(r), sel = S.sel && S.sel.type === 'room' && S.sel.id === r.id, fs = Math.round(Math.min(r.w, r.h) * 0.36);
+      return '<div class="room' + (sel ? ' sel' : '') + '" data-kind="room" data-id="' + r.id + '" tabindex="0" style="left:' + r.x + 'px;top:' + r.y + 'px;width:' + r.w + 'px;height:' + r.h + 'px">' +
+        '<div class="room-n" style="font-size:' + fs + 'px">' + r.n + '</div>' +
+        '<div class="room-meta"><span>' + esc(r.name) + '</span><span>' + (st.t ? st.d + '/' + st.t + (st.w ? ' · !' + st.w : '') : 'пусто') + '</span></div>' +
+        '<div class="room-bar"><i style="width:' + (st.t ? st.d / st.t * 100 : 0) + '%"></i></div>' +
+        (sel && S.mode === 'build' ? ['n', 's', 'e', 'w', 'ne', 'nw', 'se', 'sw'].map(function (h) { return '<span class="handle" data-kind="handle" data-handle="' + h + '"></span>'; }).join('') : '') + '</div>';
+    }).join('');
+  }
+  var room = curRoom(); var out = '';
+  room.racks.forEach(function (r) {
+    var sel = S.sel && S.sel.type === 'rack' && S.sel.id === r.id, st = rackStats(r), lbl = rackLabel(r);
+    out += '<div class="rack' + (sel ? ' sel' : '') + '" data-kind="rack" data-id="' + r.id + '" style="left:' + r.x + 'px;top:' + r.y + 'px;width:' + r.w + 'px">' +
+      '<div class="rack-head" data-kind="rack-head" data-key="r:' + r.id + '"><span class="rack-num">' + (/^\d+$/.test(lbl) ? '№ ' : '') + esc(lbl) + '</span><span>' + st.d + '/' + st.t + (st.w ? ' · !' + st.w : '') + '</span></div>';
+    r.shelves.forEach(function (sh, i) {
+      var addr = shelfAddr(r, i), skey = 's:' + r.id + ':' + i, selShelf = sel && S.sel.shelf === i;
+      if (sh.cells) {
+        var same = sh.cs.every(function (v) { return v === sh.cs[0]; }), bulk = same ? String(sh.cs[0]) : (sh.cs.some(function (v) { return v === 2; }) ? '2' : (sh.cs.some(function (v) { return v === 1; }) ? 'p' : '0'));
+        out += '<div class="shelf has-cells' + (selShelf ? ' sel' : '') + flashCls(skey) + '" data-kind="shelf" data-rack="' + r.id + '" data-i="' + i + '" data-key="' + skey + '">' +
+          '<button class="shelf-tag" data-kind="shelf-tag" data-rack="' + r.id + '" data-i="' + i + '" data-bulk="' + bulk + '" title="Отметить всю полку" tabindex="-1">' + esc(addr) + '</button><div class="cells">' +
+          sh.cs.map(function (v, j) { var ck = 'c:' + r.id + ':' + i + ':' + j, ca = cellAddr(r, i, j); return '<div class="cell' + flashCls(ck) + '" data-kind="cell" data-rack="' + r.id + '" data-i="' + i + '" data-j="' + j + '" data-st="' + v + '" data-key="' + ck + '" tabindex="0" role="button" aria-label="Ячейка ' + esc(ca) + '"><span class="lbl">' + esc(ca) + '</span></div>'; }).join('') + '</div></div>';
+      } else {
+        out += '<div class="shelf whole' + (selShelf ? ' sel' : '') + flashCls(skey) + '" data-kind="shelf-whole" data-rack="' + r.id + '" data-i="' + i + '" data-st="' + sh.st + '" data-key="' + skey + '" tabindex="0" role="button" aria-label="Полка ' + esc(addr) + '"><span class="lbl">' + esc(addr) + '</span></div>';
+      }
+    });
+    out += '</div>';
+  });
+  room.boxes.forEach(function (b) {
+    var sel = S.sel && S.sel.type === 'box' && S.sel.id === b.id, key = 'b:' + b.id;
+    out += '<div class="box' + (sel ? ' sel' : '') + flashCls(key) + '" data-kind="box" data-id="' + b.id + '" data-st="' + b.st + '" data-key="' + key + '" tabindex="0" role="button" aria-label="Коробка ' + esc(b.label) + '" style="left:' + b.x + 'px;top:' + b.y + 'px"><div class="box-label">' + esc(b.label) + '</div></div>';
+  });
+  room.pockets.forEach(function (p) {
+    var sel = S.sel && S.sel.type === 'pocket' && S.sel.id === p.id, key = 'p:' + p.id, cells = '';
+    for (var k = 0; k < p.rows * p.cols; k++) cells += '<i></i>';
+    out += '<div class="pockets' + (sel ? ' sel' : '') + flashCls(key) + '" data-kind="pocket" data-id="' + p.id + '" data-st="' + p.st + '" data-key="' + key + '" tabindex="0" role="button" aria-label="Кармашки ' + esc(p.label) + '" style="left:' + p.x + 'px;top:' + p.y + 'px;width:' + pocketW(p) + 'px;height:' + pocketH(p) + 'px">' +
+      '<div class="pk-top"><span class="pk-label">' + esc(p.label) + '</span></div><div class="pk-grid" style="grid-template-columns:repeat(' + p.cols + ',1fr);grid-template-rows:repeat(' + p.rows + ',1fr)">' + cells + '</div></div>';
+  });
+  return out;
+}
+function renderWorld() {
+  world.innerHTML = worldHTML();
+  S.flash = null; S.pulse = null;
+  var hint = $('#emptyHint'), room = S.screen === 'room' ? curRoom() : null;
+  var empty = S.screen === 'space' ? !S.space.rooms.length : (!room.racks.length && !room.boxes.length && !room.pockets.length);
+  hint.hidden = !empty;
+  if (empty) hint.innerHTML = S.screen === 'space' ? '<div><b>Пока нет комнат</b>Нажмите «+ Комната» — каждая появится квадратом с номером. Растягивайте и двигайте их как на плане сверху.</div>'
+    : '<div><b>Комната пуста</b>Справа задайте параметры и нажмите «+ Стеллаж» — полки и ячейки создаются сразу. Коробки и кармашки добавляются отдельно.</div>';
+}
+
+/* ═════════════ Инспектор ═════════════ */
+function seg(scope, cur, extra) {
+  return '<div class="seg" data-seg="' + scope + '">' + CELL_OPTS.map(function (v) { return '<button data-act="seg" data-seg="' + scope + '" data-val="' + v + '"' + (extra || '') + ' class="' + (cur === v ? 'on' : '') + '" title="' + (v ? v + ' ячейки' : 'Целая полка') + '">' + (v || 'Целая') + '</button>'; }).join('') + '</div>';
+}
+function selRack() { var r = curRoom(); return r && S.sel && S.sel.type === 'rack' ? r.racks.find(function (k) { return k.id === S.sel.id; }) : null; }
+function selBox() { var r = curRoom(); return r && S.sel && S.sel.type === 'box' ? r.boxes.find(function (k) { return k.id === S.sel.id; }) : null; }
+function selPocket() { var r = curRoom(); return r && S.sel && S.sel.type === 'pocket' ? r.pockets.find(function (k) { return k.id === S.sel.id; }) : null; }
+function selRoomObj() { return S.sel && S.sel.type === 'room' ? S.space.rooms.find(function (r) { return r.id === S.sel.id; }) : null; }
+function legendInline() { return '<div class="legend-inline"><span><i style="background:var(--cell)"></i>не проверено</span><span><i style="background:var(--done-bg);border-color:var(--done-line)"></i>готово</span><span><i style="background:var(--warn-bg);border-color:var(--warn-line)"></i>внимание</span></div>'; }
+function noteField() { return '<label class="fld"><span>Заметка для следующей смены</span><textarea data-f="space-note" placeholder="Например: 4-й стеллаж не закончили, сорри">' + esc(S.space.note) + '</textarea></label>'; }
+function stepper(act, extra, val, label) {
+  return '<div class="stepper"><button data-act="' + act + '"' + extra + ' data-d="-1" aria-label="Меньше ' + label + '">−</button><b>' + val + '</b><button data-act="' + act + '"' + extra + ' data-d="1" aria-label="Больше ' + label + '">+</button></div>';
+}
+
+function renderInspector() {
+  var html = '';
+  if (S.mode === 'check') html = checkPanel();
+  else if (S.screen === 'space') html = selRoomObj() ? roomPanel(selRoomObj()) : spacePanel();
+  else if (selRack()) html = rackPanel(selRack());
+  else if (selBox()) html = boxPanel(selBox());
+  else if (selPocket()) html = pocketPanel(selPocket());
+  else html = quickPanel();
+  var el = $('#inspector'); el.innerHTML = html;
+  var on = $('.shelf-row.on', el); if (on) requestAnimationFrame(function () { on.scrollIntoView({ block: 'nearest' }); });
+}
+
+function checkPanel() {
+  var sp = spaceStats(S.space), pr = sp.t ? Math.round(sp.d / sp.t * 100) : 0, att = attention();
+  var perRoom = S.space.rooms.map(function (r) { var s = roomStats(r); return '<button class="list-btn" data-act="open-room" data-id="' + r.id + '"><span>Комната ' + r.n + (r.name ? ' · ' + esc(r.name) : '') + '</span><small>' + s.d + '/' + s.t + (s.w ? ' · !' + s.w : '') + '</small></button>'; }).join('');
+  return '<div class="insp-sec"><h3>Прогресс</h3><div class="big">' + sp.d + ' <small>из ' + sp.t + ' · ' + pr + '%</small></div><div class="bar"><i style="width:' + pr + '%"></i></div>' + legendInline() +
+    '<p style="margin-top:10px">Клик по ячейке: <b>готово</b> → <b>внимание</b> → сброс. Клик по номеру полки отмечает все её ячейки, по кармашкам — сразу все карманы.</p></div>' +
+    '<div class="insp-sec"><h3>Требует внимания' + (att.length ? ' · ' + att.length : '') + '</h3>' + (att.length ? att.slice(0, 40).map(function (a) { return '<button class="list-btn warnrow" data-act="goto" data-room="' + a.room.id + '" data-key="' + a.key + '"><b>' + esc(a.addr) + '</b><small>Комната ' + a.room.n + '</small></button>'; }).join('') : '<p>Красных отметок нет.</p>') + '</div>' +
+    (S.space.rooms.length ? '<div class="insp-sec"><h3>Комнаты</h3>' + perRoom + '</div>' : '') +
+    '<div class="insp-sec">' + noteField() + '<button class="btn block" data-act="reset-marks"' + (sp.d + sp.w ? '' : ' disabled') + '>Сбросить все отметки</button></div>';
+}
+function spacePanel() {
+  var rooms = S.space.rooms.map(function (r) { var s = roomStats(r); return '<button class="list-btn" data-act="sel-room" data-id="' + r.id + '"><span><b>' + r.n + '</b> ' + esc(r.name || 'Комната') + '</span><small>' + s.t + ' ' + plural(s.t, 'место', 'места', 'мест') + '</small></button>'; }).join('');
+  return '<div class="insp-sec"><h3>Пространство</h3><label class="fld"><span>Название</span><input type="text" maxlength="80" value="' + esc(S.space.name) + '" data-f="space-name"></label>' + noteField() + '</div>' +
+    '<div class="insp-sec"><h3>Комнаты</h3>' + (rooms || '<p>Добавьте первую комнату — это квадрат на плане сверху.</p>') + '<button class="btn primary block" data-act="add-room">+ Комната</button>' +
+    '<p style="margin-top:10px">Двойной клик по комнате (или «Войти») — перейти внутрь и строить стеллажи.</p></div>' +
+    '<div class="insp-sec"><p><span class="kbd">Delete</span> удалить · <span class="kbd">←↑↓→</span> сдвиг · <span class="kbd">Ctrl+Z</span> отмена</p></div>';
+}
+function roomPanel(r) {
+  var s = roomStats(r);
+  return '<div class="insp-sec"><h3>Комната ' + r.n + '</h3><label class="fld"><span>Название (необязательно)</span><input type="text" maxlength="60" value="' + esc(r.name) + '" placeholder="Например: Основной зал" data-f="room-name"></label>' +
+    '<div class="row2"><label class="fld"><span>Ширина</span><input type="number" min="100" max="4000" step="20" value="' + r.w + '" data-f="room-w"></label><label class="fld"><span>Высота</span><input type="number" min="100" max="4000" step="20" value="' + r.h + '" data-f="room-h"></label></div>' +
+    '<p>Внутри: ' + r.racks.length + ' ' + plural(r.racks.length, 'стеллаж', 'стеллажа', 'стеллажей') + ', ' + r.boxes.length + ' ' + plural(r.boxes.length, 'коробка', 'коробки', 'коробок') + ', кармашки: ' + r.pockets.length + ' · ' + s.t + ' ' + plural(s.t, 'место', 'места', 'мест') + '</p>' +
+    '<button class="btn primary block" data-act="enter-room" data-id="' + r.id + '">Войти в комнату</button></div>' +
+    '<div class="insp-sec"><button class="btn danger block" data-act="del-sel">Удалить комнату</button></div>';
+}
+function rackPanel(r) {
+  var dup = isDupNum(r), custom = hasCustomNames(r);
+  var dirBtn = function (k, v, text, cur) { return '<button data-act="rack-dir" data-k="' + k + '" data-v="' + v + '" class="' + (cur === v ? 'on' : '') + '">' + text + '</button>'; };
+  return '<div class="insp-sec"><h3>Стеллаж</h3><label class="fld"><span>Название / номер</span><input type="text" maxlength="24" value="' + esc(r.label) + '" placeholder="' + r.num + '" data-f="rack-label"></label>' +
+    (dup ? '<p class="warn">Такое название уже есть — адреса будут совпадать</p>' : '<p>Меняется и в адресах всех полок и ячеек, которые вы не переименовывали вручную.</p>') +
+    '<div class="frow"><span>Ширина</span><div class="stepper"><button data-act="rack-w" data-d="-20" aria-label="Уже">−</button><b>' + r.w + '</b><button data-act="rack-w" data-d="20" aria-label="Шире">+</button></div></div></div>' +
+    '<div class="insp-sec"><h3>Нумерация</h3>' +
+    '<div class="frow"><span>Полки</span><div class="seg">' + dirBtn('sd', 'd', '↓ сверху', r.sd) + dirBtn('sd', 'u', '↑ снизу', r.sd) + '</div></div>' +
+    '<div class="frow"><span>Ячейки</span><div class="seg">' + dirBtn('cd', 'l', '→ слева', r.cd) + dirBtn('cd', 'r', '← справа', r.cd) + '</div></div>' +
+    '<p>Так нумеруется по умолчанию. Любую подпись можно заменить вручную: двойной клик по полке или ячейке на плане, либо поля ниже.</p>' +
+    (custom ? '<button class="btn block" data-act="reset-names">Сбросить свои названия</button>' : '') + '</div>' +
+    '<div class="insp-sec"><h3>Полки · ' + r.shelves.length + '</h3><div class="frow"><span>Количество</span><div class="stepper"><button data-act="shelf-del" aria-label="Меньше">−</button><b>' + r.shelves.length + '</b><button data-act="shelf-add" aria-label="Больше">+</button></div></div>' +
+    '<div class="frow"><span>Все полки</span>' + seg('all', -1) + '</div>' +
+    r.shelves.map(function (sh, i) {
+      var on = S.sel.shelf === i;
+      var row = '<div class="shelf-row' + (on ? ' on' : '') + '"><input class="shelf-name" type="text" maxlength="24" value="' + esc(shelfAddr(r, i)) + '" data-f="shelf-label" data-i="' + i + '" aria-label="Название полки ' + (i + 1) + '">' + seg('shelf', sh.cells, ' data-i="' + i + '"');
+      if (on && sh.cells) row += '<div class="cell-names">' + sh.cs.map(function (_, j) { return '<input type="text" maxlength="24" value="' + esc(cellAddr(r, i, j)) + '" data-f="cell-name" data-i="' + i + '" data-j="' + j + '" aria-label="Название ячейки ' + (j + 1) + '">'; }).join('') + '</div>';
+      return row + '</div>';
+    }).join('') + '</div>' +
+    '<div class="insp-sec"><h3>Копии</h3><div class="frow"><span>Сколько копий</span>' + stepper('dup-n', '', S.dupN, 'копий') + '</div>' +
+    '<button class="btn block" data-act="dup">Дублировать стеллаж × ' + S.dupN + '</button><p style="margin-top:8px">Номера продолжатся автоматически: ' + nextRackNum(S.space) + ', ' + (nextRackNum(S.space) + 1) + '…</p></div>' +
+    '<div class="insp-sec"><button class="btn danger block" data-act="del-sel">Удалить стеллаж</button></div>';
+}
+function boxPanel(b) {
+  return '<div class="insp-sec"><h3>Коробка</h3><label class="fld"><span>Номер / метка на коробке</span><input type="text" maxlength="24" value="' + esc(b.label) + '" data-f="box-label"></label>' +
+    '<button class="btn block" data-act="dup-box">Дублировать</button></div><div class="insp-sec"><button class="btn danger block" data-act="del-sel">Удалить коробку</button></div>';
+}
+function pocketPanel(p) {
+  return '<div class="insp-sec"><h3>Кармашки</h3><label class="fld"><span>Метка (например, 99)</span><input type="text" maxlength="24" value="' + esc(p.label) + '" data-f="pocket-label"></label>' +
+    '<div class="frow"><span>Рядов</span><div class="stepper"><button data-act="pk" data-k="rows" data-d="-1" aria-label="Меньше рядов">−</button><b>' + p.rows + '</b><button data-act="pk" data-k="rows" data-d="1" aria-label="Больше рядов">+</button></div></div>' +
+    '<div class="frow"><span>Кармашков в ряду</span><div class="stepper"><button data-act="pk" data-k="cols" data-d="-1" aria-label="Меньше">−</button><b>' + p.cols + '</b><button data-act="pk" data-k="cols" data-d="1" aria-label="Больше">+</button></div></div>' +
+    '<p>Размер нужен только для вида на плане. Отмечаются кармашки целиком — одной отметкой сразу все.</p><button class="btn block" data-act="dup-pocket">Дублировать</button></div>' +
+    '<div class="insp-sec"><button class="btn danger block" data-act="del-sel">Удалить кармашки</button></div>';
+}
+function quickPanel() {
+  var q = mem.quick, room = curRoom(), st = roomStats(room);
+  return '<div class="insp-sec"><h3>Быстрое добавление</h3><p>Задайте параметры один раз — каждый «+ Стеллаж» создаст готовый стеллаж.</p>' +
+    '<div class="frow"><span>Полок</span><div class="stepper"><button data-act="q" data-k="shelves" data-d="-1" aria-label="Меньше">−</button><b>' + q.shelves + '</b><button data-act="q" data-k="shelves" data-d="1" aria-label="Больше">+</button></div></div>' +
+    '<div class="frow"><span>Ячеек на полке</span>' + seg('q', q.cells) + '</div>' +
+    '<div class="frow"><span>Стеллажей сразу</span><div class="stepper"><button data-act="q" data-k="qty" data-d="-1" aria-label="Меньше">−</button><b>' + q.qty + '</b><button data-act="q" data-k="qty" data-d="1" aria-label="Больше">+</button></div></div>' +
+    '<div class="frow"><span>Ширина</span><div class="stepper"><button data-act="q" data-k="w" data-d="-20" aria-label="Уже">−</button><b>' + q.w + '</b><button data-act="q" data-k="w" data-d="20" aria-label="Шире">+</button></div></div>' +
+    '<button class="btn primary block" data-act="add-rack">+ Добавить ' + q.qty + ' ' + plural(q.qty, 'стеллаж', 'стеллажа', 'стеллажей') + ' (№ ' + nextRackNum(S.space) + (q.qty > 1 ? '–' + (nextRackNum(S.space) + q.qty - 1) : '') + ')</button>' +
+    '<p style="margin-top:8px">Названия можно менять: двойной клик по стеллажу, полке или ячейке на плане.</p></div>' +
+    '<div class="insp-sec"><h3>Коробка</h3><label class="fld"><span>Метка (если пусто — К1, К2…)</span><input type="text" maxlength="24" value="' + esc(S.boxLabel) + '" placeholder="Например: 10-11" data-f="q-box"></label><button class="btn block" data-act="add-box">+ Добавить коробку</button></div>' +
+    '<div class="insp-sec"><h3>Кармашки</h3><p>Подвесной органайзер с карманами. Отмечается целиком — одним кликом.</p>' +
+    '<div class="frow"><span>Рядов</span><div class="stepper"><button data-act="q" data-k="prows" data-d="-1" aria-label="Меньше">−</button><b>' + q.prows + '</b><button data-act="q" data-k="prows" data-d="1" aria-label="Больше">+</button></div></div>' +
+    '<div class="frow"><span>Кармашков в ряду</span><div class="stepper"><button data-act="q" data-k="pcols" data-d="-1" aria-label="Меньше">−</button><b>' + q.pcols + '</b><button data-act="q" data-k="pcols" data-d="1" aria-label="Больше">+</button></div></div>' +
+    '<label class="fld"><span>Метка (если пусто — Кармашки 1, 2…)</span><input type="text" maxlength="24" value="' + esc(S.pocketLabel) + '" placeholder="Например: 99" data-f="q-pocket"></label><button class="btn block" data-act="add-pocket">+ Добавить кармашки</button></div>' +
+    '<div class="insp-sec"><h3>Комната ' + curRoom().n + '</h3><label class="fld"><span>Название</span><input type="text" maxlength="60" value="' + esc(room.name) + '" data-f="room-name-in"></label><p>' + st.t + ' ' + plural(st.t, 'место', 'места', 'мест') + ' в комнате</p></div>' +
+    '<div class="insp-sec"><p>Клик — выбрать, двойной клик — переименовать, перетаскивание — переместить. <span class="kbd">Delete</span> удалить · <span class="kbd">←↑↓→</span> сдвиг · <span class="kbd">Ctrl+Z</span> отмена.</p>' + legendInline() + '</div>';
+}
+
+/* ═════════════ Действия: строительство ═════════════ */
+function overlaps(a, b, pad) { pad = pad == null ? 16 : pad; return a.x < b.x + b.w + pad && a.x + a.w + pad > b.x && a.y < b.y + b.h + pad && a.y + a.h + pad > b.y; }
+function findSpot(rects, w, h, hint, step) {
+  function free(x, y) { return !rects.some(function (r) { return overlaps({ x: x, y: y, w: w, h: h }, r); }); }
+  if (hint && free(hint.x, hint.y)) return hint;
+  for (var y = 40; y < 5000; y += step * 2) for (var x = 40; x < 2600 - w; x += step) if (free(x, y)) return { x: x, y: y };
+  return { x: 40, y: 40 };
+}
+function roomRects(room) {
+  return room.racks.map(function (r) { return { x: r.x, y: r.y, w: r.w, h: rackH(r) }; })
+    .concat(room.boxes.map(function (b) { return { x: b.x, y: b.y, w: BOX_W, h: BOX_H }; }))
+    .concat(room.pockets.map(function (p) { return { x: p.x, y: p.y, w: pocketW(p), h: pocketH(p) }; }));
+}
+function rightHint(room) {
+  var rs = roomRects(room); if (!rs.length) return { x: 40, y: 40 };
+  var m = rs.reduce(function (a, r) { return r.x + r.w > a.x + a.w ? r : a; }, rs[0]);
+  return { x: snapTo(m.x + m.w + 20, SNAP), y: m.y };
+}
+function addRoom() {
+  mutate(function () {
+    var sp = S.space; sp.roomSeq++; var w = 240, h = 200;
+    var spot = findSpot(sp.rooms.map(function (r) { return { x: r.x, y: r.y, w: r.w, h: r.h }; }), w, h, null, GRID);
+    var room = { id: uid(), n: sp.roomSeq, name: '', x: spot.x, y: spot.y, w: w, h: h, racks: [], boxes: [], pockets: [] };
+    sp.rooms.push(room); S.sel = { type: 'room', id: room.id };
+  });
+  revealSel();
+}
+function addRacks() {
+  var q = mem.quick, room = curRoom();
+  mutate(function () {
+    var num = nextRackNum(S.space), last = null, h = HEAD_H + q.shelves * SHELF_H + 6;
+    for (var i = 0; i < q.qty; i++) {
+      var hint = last ? { x: last.x + last.w + 20, y: last.y } : rightHint(room);
+      var spot = findSpot(roomRects(room), q.w, h, hint, SNAP);
+      last = { id: uid(), num: num + i, label: '', sd: 'd', cd: 'l', x: spot.x, y: spot.y, w: q.w, shelves: Array.from({ length: q.shelves }, function () { return newShelf(q.cells); }) };
+      room.racks.push(last);
+    }
+    S.sel = { type: 'rack', id: last.id };
+  });
+  revealSel();
+}
+function addBox(copyOf) {
+  var room = curRoom();
+  mutate(function () {
+    var label = copyOf ? copyOf.label : (S.boxLabel.trim() || 'К' + (room.boxes.length + 1));
+    var hint = copyOf ? { x: copyOf.x + BOX_W + 16, y: copyOf.y } : rightHint(room);
+    var spot = findSpot(roomRects(room), BOX_W, BOX_H, hint, SNAP);
+    var box = { id: uid(), label: label, x: spot.x, y: spot.y, st: 0 };
+    room.boxes.push(box); S.sel = { type: 'box', id: box.id }; if (!copyOf) S.boxLabel = '';
+  });
+  revealSel();
+}
+function addPocket(copyOf) {
+  var room = curRoom(), q = mem.quick;
+  mutate(function () {
+    var rows = copyOf ? copyOf.rows : q.prows, cols = copyOf ? copyOf.cols : q.pcols;
+    var label = copyOf ? copyOf.label : (S.pocketLabel.trim() || 'Кармашки ' + (room.pockets.length + 1));
+    var w = cols * 40 + 10, h = rows * 52 + 28;
+    var hint = copyOf ? { x: copyOf.x + pocketW(copyOf) + 16, y: copyOf.y } : rightHint(room);
+    var spot = findSpot(roomRects(room), w, h, hint, SNAP);
+    var p = { id: uid(), label: label, x: spot.x, y: spot.y, rows: rows, cols: cols, st: 0 };
+    room.pockets.push(p); S.sel = { type: 'pocket', id: p.id }; if (!copyOf) S.pocketLabel = '';
+  });
+  revealSel();
+}
+function dupRack() {
+  var src = selRack(), room = curRoom(); if (!src) return;
+  mutate(function () {
+    var num = nextRackNum(S.space), last = src;
+    for (var i = 0; i < S.dupN; i++) {
+      var c = JSON.parse(JSON.stringify(src)); c.id = uid(); c.num = num + i; c.label = '';
+      c.shelves.forEach(function (sh) { sh.st = 0; sh.cs = sh.cs.map(function () { return 0; }); sh.label = ''; sh.names = sh.names.map(function () { return ''; }); });
+      var spot = findSpot(roomRects(room), c.w, rackH(c), { x: last.x + last.w + 20, y: last.y }, SNAP); c.x = spot.x; c.y = spot.y;
+      room.racks.push(c); last = c;
+    }
+    S.sel = { type: 'rack', id: last.id };
+  });
+  revealSel();
+}
+function deleteSel() {
+  if (!S.sel) return;
+  var t = S.sel.type, label = { room: 'Комната удалена', rack: 'Стеллаж удалён', box: 'Коробка удалена', pocket: 'Кармашки удалены' }[t], id = S.sel.id;
+  mutate(function () {
+    if (t === 'room') S.space.rooms = S.space.rooms.filter(function (r) { return r.id !== id; });
+    else { var room = curRoom(), key = { rack: 'racks', box: 'boxes', pocket: 'pockets' }[t]; room[key] = room[key].filter(function (x) { return x.id !== id; }); }
+    S.sel = null;
+  });
+  toast(label, { text: 'Отменить', fn: undo });
+}
+
+/* Переименование: двойной клик по стеллажу, полке, ячейке, коробке или кармашкам */
+function renameTarget(info) {
+  var room = curRoom(); if (!room || !info) return null;
+  if (info.kind === 'box' || info.kind === 'pocket') {
+    var o = (info.kind === 'box' ? room.boxes : room.pockets).find(function (x) { return x.id === info.id; }); if (!o) return null;
+    return { key: (info.kind === 'box' ? 'b:' : 'p:') + o.id, value: o.label, apply: function (v) { if (v) o.label = v.slice(0, 24); } };
+  }
+  var r = room.racks.find(function (x) { return x.id === info.rackId; }); if (!r) return null;
+  if (info.kind === 'rack-head' || info.kind === 'rack') return { key: 'r:' + r.id, value: rackLabel(r), apply: function (v) { r.label = (!v || v === String(r.num)) ? '' : v.slice(0, 24); } };
+  var sh = r.shelves[info.i]; if (!sh) return null;
+  if (info.kind === 'cell') return { key: 'c:' + r.id + ':' + info.i + ':' + info.j, value: cellAddr(r, info.i, info.j), apply: function (v) { sh.names[info.j] = (!v || v === cellDefault(r, info.i, info.j)) ? '' : v.slice(0, 24); } };
+  if (info.kind === 'shelf-tag' || info.kind === 'shelf-whole') return { key: 's:' + r.id + ':' + info.i, value: shelfAddr(r, info.i), apply: function (v) { sh.label = (!v || v === shelfDefault(r, info.i)) ? '' : v.slice(0, 24); } };
+  return null;
+}
+function closeRename() { $$('.inline-edit').forEach(function (n) { n.remove(); }); }
+function startRename(info) {
+  var t = renameTarget(info); if (!t) return;
+  var el = world.querySelector('[data-key="' + t.key + '"]'); if (!el) return;
+  closeRename();
+  var sr = stage.getBoundingClientRect(), er = el.getBoundingClientRect();
+  var inp = document.createElement('input'); inp.className = 'inline-edit'; inp.type = 'text'; inp.maxLength = 24; inp.value = t.value; inp.setAttribute('aria-label', 'Новое название');
+  var w = Math.max(er.width, 96), h = 34;
+  inp.style.width = w + 'px'; inp.style.height = h + 'px';
+  inp.style.left = clamp(er.left - sr.left + er.width / 2 - w / 2, 4, Math.max(4, sr.width - w - 4)) + 'px';
+  inp.style.top = clamp(er.top - sr.top + er.height / 2 - h / 2, 4, Math.max(4, sr.height - h - 4)) + 'px';
+  stage.appendChild(inp); inp.focus(); inp.select();
+  var done = false;
+  function commit(save) { if (done) return; done = true; var v = inp.value.trim(); inp.remove(); if (save && v !== t.value) mutate(function () { t.apply(v); }); }
+  inp.addEventListener('keydown', function (e) { e.stopPropagation(); if (e.key === 'Enter') { e.preventDefault(); commit(true); } else if (e.key === 'Escape') commit(false); });
+  inp.addEventListener('blur', function () { commit(true); });
+}
+
+/* ═════════════ Действия: отметки ═════════════ */
+function cycleUnit(info) {
+  var room = curRoom(), key;
+  if (info.kind === 'room') return enterRoom(info.id);
+  if (info.kind === 'box' || info.kind === 'pocket') {
+    var o = (info.kind === 'box' ? room.boxes : room.pockets).find(function (x) { return x.id === info.id; }); if (!o) return;
+    key = (info.kind === 'box' ? 'b:' : 'p:') + o.id; S.flash = key; mutate(function () { o.st = (o.st + 1) % 3; }); return;
+  }
+  var r = room.racks.find(function (x) { return x.id === info.rackId; }); if (!r) return; var sh = r.shelves[info.i]; if (!sh) return;
+  if (info.kind === 'cell') { key = 'c:' + r.id + ':' + info.i + ':' + info.j; S.flash = key; mutate(function () { sh.cs[info.j] = (sh.cs[info.j] + 1) % 3; }); }
+  else if (info.kind === 'shelf-whole') { key = 's:' + r.id + ':' + info.i; S.flash = key; mutate(function () { sh.st = (sh.st + 1) % 3; }); }
+  else if (info.kind === 'shelf-tag') { key = 's:' + r.id + ':' + info.i; S.flash = key; mutate(function () { var same = sh.cs.every(function (v) { return v === sh.cs[0]; }); var nx = same ? (sh.cs[0] + 1) % 3 : 1; sh.cs = sh.cs.map(function () { return nx; }); }); }
+}
+function resetMarks() {
+  mutate(function () { S.space.rooms.forEach(function (room) {
+    room.racks.forEach(function (r) { r.shelves.forEach(function (sh) { sh.st = 0; sh.cs = sh.cs.map(function () { return 0; }); }); });
+    room.boxes.forEach(function (b) { b.st = 0; }); room.pockets.forEach(function (p) { p.st = 0; });
+  }); });
+  toast('Отметки сброшены', { text: 'Отменить', fn: undo });
+}
+
+/* ═════════════ Навигация и поиск ═════════════ */
+function openSpace(id, opts) {
+  var sp = mem.spaces[id]; if (!sp) return;
+  S.space = sp; S.undo = []; S.redo = []; S.sel = null; S.views = {}; mem.last = id; S.savedAt = sp.updatedAt;
+  var hasRacks = sp.rooms.some(function (r) { return r.racks.length || r.boxes.length || r.pockets.length; });
+  S.mode = hasRacks ? 'check' : 'build';
+  if (sp.rooms.length === 1) { S.screen = 'room'; S.roomId = sp.rooms[0].id; } else { S.screen = 'space'; S.roomId = null; }
+  S.noteVisible = !!sp.note && !(opts && opts.quiet); S.dive = true; persist(); render();
+}
+function enterRoom(id) { S.roomId = id; S.screen = 'room'; S.sel = null; S.dive = true; render(); }
+function goSpace() { S.screen = 'space'; S.sel = null; S.dive = true; render(); }
+function goHome() { S.screen = 'home'; S.sel = null; render(); }
+/* Подсветка найденного: отдельное кольцо поверх плана. Раньше это была тень самого элемента —
+   соседние ячейки и полки её перекрывали, а у полки с ячейками внутренняя часть пряталась под фоном ячеек. */
+function spawnLocator(el) {
+  $$('.locate-ring').forEach(function (n) { n.remove(); });
+  var v = view(), wr = world.getBoundingClientRect(), er = el.getBoundingClientRect(), pad = 4;
+  var ring = document.createElement('div'); ring.className = 'locate-ring'; ring.setAttribute('aria-hidden', 'true');
+  ring.style.left = ((er.left - wr.left) / v.k - pad) + 'px'; ring.style.top = ((er.top - wr.top) / v.k - pad) + 'px';
+  ring.style.width = (er.width / v.k + pad * 2) + 'px'; ring.style.height = (er.height / v.k + pad * 2) + 'px';
+  world.appendChild(ring);
+  setTimeout(function () { if (ring.parentNode) ring.remove(); }, 4400);
+}
+function goTo(roomId, key) {
+  if (S.screen !== 'room' || S.roomId !== roomId) { S.roomId = roomId; S.screen = 'room'; S.dive = true; }
+  S.sel = null; render();
+  requestAnimationFrame(function () {
+    requestAnimationFrame(function () {
+      var el = world.querySelector('[data-key="' + key + '"]'); if (!el) return;
+      var v = view(), sr = stage.getBoundingClientRect(), er = el.getBoundingClientRect();
+      if (v.k < 0.7) { v.k = 0.9; applyView(); er = el.getBoundingClientRect(); }
+      spawnLocator(el);
+      glide(); v.x += (sr.left + sr.width / 2) - (er.left + er.width / 2); v.y += (sr.top + sr.height / 2) - (er.top + er.height / 2); applyView();
+    });
+  });
+}
+function normAddr(s) { return String(s).trim().toLowerCase().replace(/[\s._–—\/]+/g, '-'); }
+function addrIndex() {
+  var out = [], rooms = S.space.rooms.slice().sort(function (a, b) { return (a.id === S.roomId ? 0 : 1) - (b.id === S.roomId ? 0 : 1); });
+  rooms.forEach(function (room) {
+    room.racks.forEach(function (r) {
+      out.push({ room: room, key: 'r:' + r.id, text: rackLabel(r) });
+      r.shelves.forEach(function (sh, i) {
+        out.push({ room: room, key: 's:' + r.id + ':' + i, text: shelfAddr(r, i), whole: !sh.cells });
+        if (sh.cells) sh.cs.forEach(function (_, j) { out.push({ room: room, key: 'c:' + r.id + ':' + i + ':' + j, text: cellAddr(r, i, j) }); });
+      });
+    });
+    room.boxes.forEach(function (b) { out.push({ room: room, key: 'b:' + b.id, text: b.label }); });
+    room.pockets.forEach(function (p) { out.push({ room: room, key: 'p:' + p.id, text: p.label }); });
+  });
+  return out.map(function (e) { e.n = normAddr(e.text); return e; });
+}
+function searchAddr(q) {
+  q = q.trim(); if (!q) return;
+  var n = normAddr(q), idx = addrIndex(), hit = idx.find(function (e) { return e.n === n; });
+  if (!hit) {
+    var m = n.match(/^(.+)-[^-]+$/);                       // «5-2-1», а полка 5-2 без ячеек → покажем полку
+    if (m) { var sh = idx.find(function (e) { return e.whole && e.n === m[1]; }); if (sh) { toast('В этой полке нет ячеек — показываю полку'); return goTo(sh.room.id, sh.key); } }
+    var part = idx.filter(function (e) { return e.n.indexOf(n) === 0; }); if (part.length === 1) hit = part[0];   // единственное совпадение по началу
+  }
+  if (hit) return goTo(hit.room.id, hit.key);
+  toast('Адрес «' + q + '» не найден');
+}
+function nextAttention() {
+  var list = attention(); if (!list.length) return;
+  S.attnIdx = (S.attnIdx + 1) % list.length; var a = list[S.attnIdx]; goTo(a.room.id, a.key);
+}
+
+/* ═════════════ Экспорт / импорт ═════════════ */
+function exportJSON() { return JSON.stringify({ format: 'locus', version: 2, exportedAt: Date.now(), space: S.space }, null, 2); }
+function fileName() {
+  var d = new Date(), p = function (n) { return String(n).padStart(2, '0'); };
+  var slug = S.space.name.trim().replace(/[^\p{L}\p{N}]+/gu, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'sklad';
+  return 'locus-' + slug + '-' + d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + '-' + p(d.getHours()) + p(d.getMinutes()) + '.json';
+}
+function copyText(text, ta) {
+  if (navigator.clipboard && navigator.clipboard.writeText) return navigator.clipboard.writeText(text);
+  return new Promise(function (res, rej) { try { ta.select(); document.execCommand('copy') ? res() : rej(); } catch (e) { rej(e); } });
+}
+function isFramed() { try { return window.self !== window.top; } catch (e) { return true; } }
+function downloadBlob(name, text) {
+  var url = URL.createObjectURL(new Blob([text], { type: 'application/json' })), a = document.createElement('a');
+  a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(function () { URL.revokeObjectURL(url); }, 2500);
+}
+function openExport() {
+  if (document.activeElement && document.activeElement.blur) document.activeElement.blur();
+  persist();
+  var json = exportJSON(), s = spaceStats(S.space), name = fileName(), direct = !caps.downloads && !isFramed();
+  openModal({ title: 'Сохранение для смены', lead: 'Файл содержит всё: комнаты, стеллажи, коробки и текущие отметки. Следующая смена загрузит его через «Загрузить сохранение».',
+    html: '<div class="sumline"><span><b>' + esc(S.space.name) + '</b></span><span>' + S.space.rooms.length + ' ' + plural(S.space.rooms.length, 'комната', 'комнаты', 'комнат') + '</span><span>готово <b>' + s.d + '/' + s.t + '</b></span>' + (s.w ? '<span>внимание <b>' + s.w + '</b></span>' : '') + '</div>' +
+      ((caps.downloads || direct) ? '' : '<p class="lead" style="color:var(--orange)">Здесь прямое скачивание недоступно. Нажмите «Копировать JSON» и вставьте в текстовый файл с расширением .json — или откройте приложение в обычной вкладке.</p>') +
+      '<textarea class="json" id="jsonOut" readonly spellcheck="false">' + esc(json) + '</textarea>',
+    buttons: [{ text: 'Закрыть' }, { text: 'Копировать JSON', fn: function (m) { var ta = $('#jsonOut', m); copyText(json, ta).then(function () { toast('JSON скопирован'); }).catch(function () { ta.select(); toast('Выделено — нажмите Ctrl+C'); }); return false; } }]
+      .concat(direct ? [{ text: 'Скачать файл', kind: 'primary', fn: function () { downloadBlob(name, json); toast('Файл сохранён'); } }] : [])
+      .concat(caps.downloads ? [{ text: 'Скачать файл', kind: 'primary', fn: function () { caps.downloads.save({ filename: name, data: json }).then(function () { toast('Файл сохранён'); }).catch(function (e) { if (e && e.code !== 'declined') toast('Не удалось скачать — скопируйте JSON'); }); } }] : []) });
+}
+function openImport() {
+  openModal({ title: 'Загрузить сохранение', lead: 'Выберите JSON-файл от предыдущей смены или вставьте его содержимое.',
+    html: '<label class="drop" id="dropZone">Перетащите файл сюда или нажмите, чтобы выбрать<input type="file" id="fileInp" accept=".json,application/json,text/plain" hidden></label><textarea class="json" id="jsonIn" placeholder="…или вставьте JSON сюда" spellcheck="false"></textarea>',
+    buttons: [{ text: 'Отмена' }, { text: 'Загрузить', kind: 'primary', fn: function (m) { var t = $('#jsonIn', m).value.trim(); if (!t) { toast('Выберите файл или вставьте JSON'); return false; } importText(t); return false; } }],
+    onOpen: function (m) {
+      var fi = $('#fileInp', m), dz = $('#dropZone', m), ta = $('#jsonIn', m);
+      function readFile(f) { if (!f) return; var fr = new FileReader(); fr.onload = function () { ta.value = String(fr.result); importText(ta.value); }; fr.onerror = function () { toast('Не удалось прочитать файл'); }; fr.readAsText(f); }
+      fi.addEventListener('change', function () { readFile(fi.files[0]); });
+      ['dragenter', 'dragover'].forEach(function (ev) { dz.addEventListener(ev, function (e) { e.preventDefault(); dz.classList.add('over'); }); });
+      ['dragleave', 'drop'].forEach(function (ev) { dz.addEventListener(ev, function (e) { e.preventDefault(); dz.classList.remove('over'); }); });
+      dz.addEventListener('drop', function (e) { readFile(e.dataTransfer && e.dataTransfer.files[0]); });
+    } });
+}
+function importText(text) {
+  var data; try { data = JSON.parse(text); } catch (e) { toast('Это не похоже на JSON-сохранение'); return; }
+  var sp = normalizeSpace(data && data.space ? data.space : data);
+  if (!sp) { toast('В файле не найдено пространство Locus'); return; }
+  closeModal();
+  function finish(space) { mem.spaces[space.id] = space; persist(); openSpace(space.id); var s = spaceStats(space); toast('Загружено: ' + space.rooms.length + ' ' + plural(space.rooms.length, 'комната', 'комнаты', 'комнат') + ', отмечено ' + s.d + ' из ' + s.t); }
+  if (mem.spaces[sp.id]) {
+    var old = mem.spaces[sp.id];
+    openModal({ title: 'Такое пространство уже есть', lead: 'На этом устройстве «' + esc(old.name) + '» обновлялось ' + fmtDate(old.updatedAt) + '. В загружаемом файле — версия от ' + fmtDate(sp.updatedAt) + '.',
+      buttons: [{ text: 'Отмена' }, { text: 'Сохранить как копию', fn: function () { sp.id = uid(); sp.name += ' (копия)'; finish(sp); } }, { text: 'Заменить', kind: 'primary', fn: function () { finish(sp); } }] });
+  } else finish(sp);
+}
+function openHelp() {
+  openModal({ title: 'Как это работает', lead: 'Пять шагов от пустого экрана до передачи смене.',
+    html: '<ol class="steps"><li><span class="n">1</span><div><b>Комнаты</b><span>«Новое пространство» → «+ Комната». Квадраты можно двигать и растягивать, цифра внутри — порядок создания.</span></div></li>' +
+      '<li><span class="n">2</span><div><b>Стеллажи</b><span>Зайдите в комнату (двойной клик). Задайте число полок и ячеек — и добавляйте стеллажи пачками. Адрес: 2-3-1 — стеллаж 2, полка 3 (сверху), ячейка 1 (слева). Любое название меняется двойным кликом — как на вашей наклейке.</span></div></li>' +
+      '<li><span class="n">3</span><div><b>Коробки и кармашки</b><span>Картонные коробки и подвесные кармашки — отдельные инструменты со своей меткой. Кармашки отмечаются целиком, одним кликом.</span></div></li>' +
+      '<li><span class="n">4</span><div><b>Проверка</b><span>Режим «Проверка»: клик по ячейке — зелёная (готово), ещё клик — красная (внимание), ещё — сброс.</span></div></li>' +
+      '<li><span class="n">5</span><div><b>Передача смены</b><span>«Сохранить в файл» → JSON отправляется коллеге → он нажимает «Загрузить» и видит весь склад с вашими отметками. Всё остальное хранится в вашем браузере.</span></div></li></ol>',
+    buttons: [{ text: 'Понятно', kind: 'primary' }] });
+}
+function openNewSpace() {
+  openModal({ title: 'Новое пространство', lead: 'Назовите его так, чтобы коллеги сразу понимали, о каком ПВЗ речь.',
+    html: '<label class="fld"><span>Название</span><input type="text" id="nsName" maxlength="80" placeholder="Например: ПВЗ Парфёновская" autocomplete="off"></label>',
+    buttons: [{ text: 'Отмена' }, { text: 'Создать', kind: 'primary', fn: function (m) { create($('#nsName', m).value); } }],
+    onOpen: function (m) { var inp = $('#nsName', m); inp.focus(); inp.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); create(inp.value); closeModal(); } }); } });
+  function create(name) { var sp = newSpace(name.trim() || 'Новое пространство'); mem.spaces[sp.id] = sp; persist(); openSpace(sp.id); addRoom(); }
+}
+
+/* ═════════════ Pointer-взаимодействие ═════════════ */
+var ptrs = new Map(), drag = null, pinch = null, lastTap = { t: 0, key: null };
+var NODE_CLS = { room: '.room', rack: '.rack', box: '.box', pocket: '.pockets' };
+function readInfo(el) {
+  if (!el) return null; var d = el.dataset, rackEl = el.closest('.rack');
+  return { kind: d.kind, id: d.id, rackId: d.rack || (rackEl && rackEl.dataset.id), i: d.i !== undefined ? +d.i : undefined, j: d.j !== undefined ? +d.j : undefined, handle: d.handle };
+}
+function itemOf(info) {
+  if (!info) return null;
+  if (info.kind === 'room' || info.kind === 'box' || info.kind === 'pocket') return { type: info.kind, id: info.id };
+  if (info.rackId) return { type: 'rack', id: info.rackId, shelf: info.i };
+  return null;
+}
+function getObj(it) {
+  if (it.type === 'room') return S.space.rooms.find(function (r) { return r.id === it.id; });
+  var room = curRoom(), list = it.type === 'rack' ? room.racks : it.type === 'box' ? room.boxes : room.pockets;
+  return list.find(function (x) { return x.id === it.id; });
+}
+function nodeOf(it) { return world.querySelector(NODE_CLS[it.type] + '[data-id="' + it.id + '"]'); }
+function tapKeyOf(i) {
+  if (i.kind === 'room' || i.kind === 'box' || i.kind === 'pocket') return i.kind + ':' + i.id;
+  if (i.kind === 'cell') return 'c:' + i.rackId + ':' + i.i + ':' + i.j;
+  if (i.kind === 'shelf-tag' || i.kind === 'shelf-whole') return 's:' + i.rackId + ':' + i.i;
+  if (i.kind === 'rack-head' || i.kind === 'rack') return 'r:' + i.rackId;
+  return null;
+}
+
+stage.addEventListener('pointerdown', function (e) {
+  if (e.target.closest && e.target.closest('.inline-edit')) return;
+  if (e.pointerType === 'mouse' && e.button !== 0) return;
+  try { stage.setPointerCapture(e.pointerId); } catch (x) {}
+  ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (ptrs.size === 2) { drag = null; var p = Array.from(ptrs.values()), v = view(); pinch = { d: Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y) || 1, k: v.k, vx: v.x, vy: v.y, mx: (p[0].x + p[1].x) / 2, my: (p[0].y + p[1].y) / 2 }; return; }
+  var el = e.target.closest('[data-kind]'), info = readInfo(el), v0 = view();
+  drag = { id: e.pointerId, sx: e.clientX, sy: e.clientY, moved: false, info: info, mode: 'pan', vx: v0.x, vy: v0.y };
+  if (S.mode === 'build' && info) {
+    if (info.kind === 'handle') { var room = S.space.rooms.find(function (r) { return r.id === S.sel.id; }); drag.mode = 'resize'; drag.item = S.sel; drag.snap = snapshot(); drag.orig = { x: room.x, y: room.y, w: room.w, h: room.h }; drag.handle = info.handle; }
+    else { var it = itemOf(info); if (it) { S.sel = it; renderWorld(); renderInspector(); var obj = getObj(it); drag.mode = 'move'; drag.item = it; drag.snap = snapshot(); drag.orig = { x: obj.x, y: obj.y }; } }
+  } else if (S.mode === 'build' && !info) { if (S.sel) { S.sel = null; renderWorld(); renderInspector(); } }
+});
+stage.addEventListener('pointermove', function (e) {
+  if (!ptrs.has(e.pointerId)) return; ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
+  if (pinch && ptrs.size >= 2) {
+    var p = Array.from(ptrs.values()), d = Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y) || 1, mx = (p[0].x + p[1].x) / 2, my = (p[0].y + p[1].y) / 2, v = view(), r = stage.getBoundingClientRect();
+    var nk = clamp(pinch.k * d / pinch.d, 0.2, 2.5), wx = (pinch.mx - r.left - pinch.vx) / pinch.k, wy = (pinch.my - r.top - pinch.vy) / pinch.k;
+    v.k = nk; v.x = (mx - r.left) - wx * nk; v.y = (my - r.top) - wy * nk; applyView(); return;
+  }
+  if (!drag || drag.id !== e.pointerId) return;
+  var dx = e.clientX - drag.sx, dy = e.clientY - drag.sy;
+  if (!drag.moved && Math.hypot(dx, dy) > 5) { drag.moved = true; if (drag.mode === 'pan') stage.classList.add('panning'); }
+  if (!drag.moved) return;
+  var v2 = view();
+  if (drag.mode === 'pan') { v2.x = drag.vx + dx; v2.y = drag.vy + dy; applyView(); }
+  else if (drag.mode === 'move') {
+    var g = drag.item.type === 'room' ? GRID : SNAP, nx = snapTo(drag.orig.x + dx / v2.k, g), ny = snapTo(drag.orig.y + dy / v2.k, g), n = nodeOf(drag.item);
+    drag.cur = { x: nx, y: ny }; if (n) { n.style.left = nx + 'px'; n.style.top = ny + 'px'; }
+  } else if (drag.mode === 'resize') {
+    var o = drag.orig, sx = snapTo(dx / v2.k, GRID), sy = snapTo(dy / v2.k, GRID), x = o.x, y = o.y, w = o.w, h = o.h, hd = drag.handle;
+    if (hd.indexOf('e') > -1) w = Math.max(100, o.w + sx);
+    if (hd.indexOf('s') > -1) h = Math.max(100, o.h + sy);
+    if (hd.indexOf('w') > -1) { var nw = Math.max(100, o.w - sx); x = o.x + (o.w - nw); w = nw; }
+    if (hd.indexOf('n') > -1) { var nh = Math.max(100, o.h - sy); y = o.y + (o.h - nh); h = nh; }
+    drag.cur = { x: x, y: y, w: w, h: h }; var rn = nodeOf(drag.item);
+    if (rn) { rn.style.left = x + 'px'; rn.style.top = y + 'px'; rn.style.width = w + 'px'; rn.style.height = h + 'px'; var num = rn.querySelector('.room-n'); if (num) num.style.fontSize = Math.round(Math.min(w, h) * 0.36) + 'px'; }
+  }
+});
+function endPointer(e) {
+  ptrs.delete(e.pointerId); if (ptrs.size < 2) pinch = null;
+  stage.classList.remove('panning');
+  if (!drag || drag.id !== e.pointerId) return;
+  var d = drag; drag = null;
+  if (e.type === 'pointercancel') { if (d.moved && (d.mode === 'move' || d.mode === 'resize')) render(); return; }
+  if (d.moved) {
+    if ((d.mode === 'move' || d.mode === 'resize') && d.cur) { pushUndo(d.snap); var o = getObj(d.item); Object.assign(o, d.cur); touch(); render(); }
+    return;
+  }
+  // клик без перемещения
+  if (S.mode === 'check' && d.info) cycleUnit(d.info);
+  else if (S.mode === 'build' && d.info) {
+    var tk = tapKeyOf(d.info); if (!tk) return;
+    var now = Date.now();
+    if (lastTap.key === tk && now - lastTap.t < 380) {            // двойной клик / двойной тап
+      lastTap = { t: 0, key: null };
+      if (d.info.kind === 'room') enterRoom(d.info.id); else startRename(d.info);
+    } else lastTap = { t: now, key: tk };
+  }
+}
+stage.addEventListener('pointerup', endPointer);
+stage.addEventListener('pointercancel', endPointer);
+stage.addEventListener('wheel', function (e) {
+  e.preventDefault(); var v = view();
+  if (e.ctrlKey || e.metaKey) zoomAt(e.clientX, e.clientY, v.k * Math.exp(-e.deltaY * 0.0018));
+  else { v.x -= e.deltaX; v.y -= e.deltaY; applyView(); }
+}, { passive: false });
+
+/* ═════════════ Клики и ввод ═════════════ */
+document.addEventListener('click', function (e) {
+  var el = e.target.closest('[data-act]'); if (!el) return;
+  var act = el.dataset.act, r, p;
+  switch (act) {
+    case 'home': goHome(); break;
+    case 'continue': var id = mem.last && mem.spaces[mem.last] ? mem.last : Object.keys(mem.spaces)[0]; if (id) openSpace(id); break;
+    case 'new-space': openNewSpace(); break;
+    case 'import': openImport(); break;
+    case 'help': openHelp(); break;
+    case 'open-space': openSpace(el.dataset.id); break;
+    case 'del-space': (function (id) { var sp = mem.spaces[id]; ask('Удалить «' + sp.name + '»?', 'Пространство удалится с этого устройства. Если нужна копия — сначала сохраните его в файл.', 'Удалить', true).then(function (ok) { if (!ok) return; delete mem.spaces[id]; if (mem.last === id) mem.last = null; persist(); render(); }); })(el.dataset.id); break;
+    case 'nav-space': goSpace(); break;
+    case 'close-note': S.noteVisible = false; renderNote(); break;
+    case 'mode': closeRename(); S.mode = el.dataset.v; S.sel = null; render(); break;
+    case 'add-room': addRoom(); break;
+    case 'add-rack': addRacks(); break;
+    case 'add-box': addBox(); break;
+    case 'add-pocket': addPocket(); break;
+    case 'undo': undo(); break;
+    case 'redo': redo(); break;
+    case 'attn': nextAttention(); break;
+    case 'zoom-in': zoomBy(1.2); break;
+    case 'zoom-out': zoomBy(1 / 1.2); break;
+    case 'fit': glide(); fitView(); break;
+    case 'panel': S.panel = !S.panel; render(); break;
+    case 'save-file': openExport(); break;
+    case 'enter-room': enterRoom(el.dataset.id); break;
+    case 'open-room': enterRoom(el.dataset.id); break;
+    case 'sel-room': S.sel = { type: 'room', id: el.dataset.id }; render(); break;
+    case 'goto': goTo(el.dataset.room, el.dataset.key); break;
+    case 'reset-marks': ask('Сбросить все отметки?', 'Все зелёные и красные отметки в этом пространстве будут сняты. Структура склада останется.', 'Сбросить', true).then(function (ok) { if (ok) resetMarks(); }); break;
+    case 'del-sel': deleteSel(); break;
+    case 'dup': dupRack(); break;
+    case 'dup-box': addBox(selBox()); break;
+    case 'dup-pocket': addPocket(selPocket()); break;
+    case 'dup-n': S.dupN = clamp(S.dupN + +el.dataset.d, 1, 30); renderInspector(); break;
+    case 'q': var k = el.dataset.k, lim = { shelves: [1, 12], qty: [1, 30], w: [160, 420], prows: [1, 8], pcols: [1, 8] }[k]; mem.quick[k] = clamp(mem.quick[k] + +el.dataset.d, lim[0], lim[1]); scheduleSave(); renderInspector(); break;
+    case 'pk': p = selPocket(); if (p) mutate(function () { p[el.dataset.k] = clamp(p[el.dataset.k] + +el.dataset.d, 1, 8); }); break;
+    case 'shelf-add': r = selRack(); mutate(function () { var last = r.shelves[r.shelves.length - 1]; r.shelves.push(newShelf(last ? last.cells : 3)); }); break;
+    case 'shelf-del': r = selRack(); if (r.shelves.length > 1) mutate(function () { r.shelves.pop(); if (S.sel.shelf >= r.shelves.length) S.sel.shelf = undefined; }); break;
+    case 'rack-w': r = selRack(); mutate(function () { r.w = clamp(r.w + +el.dataset.d, 160, 420); }); break;
+    case 'rack-dir': r = selRack(); mutate(function () { r[el.dataset.k] = el.dataset.v; }); break;
+    case 'reset-names': r = selRack(); mutate(function () { r.shelves.forEach(function (sh) { sh.label = ''; sh.names = sh.names.map(function () { return ''; }); }); }); toast('Названия сброшены к нумерации по умолчанию', { text: 'Отменить', fn: undo }); break;
+    case 'seg':
+      var val = +el.dataset.val, scope = el.dataset.seg;
+      if (scope === 'q') { mem.quick.cells = val; scheduleSave(); renderInspector(); }
+      else { r = selRack(); mutate(function () { if (scope === 'all') r.shelves.forEach(function (sh) { setCells(sh, val); }); else setCells(r.shelves[+el.dataset.i], val); }); }
+      break;
+  }
+});
+document.addEventListener('change', function (e) {
+  var el = e.target.closest('[data-f]'); if (!el) return;
+  var f = el.dataset.f, val = el.value, r, b, rm, p, i = +el.dataset.i, j = +el.dataset.j, v = val.trim();
+  switch (f) {
+    case 'space-name': mutate(function () { S.space.name = v || 'Пространство'; }); break;
+    case 'space-note': mutate(function () { S.space.note = val.slice(0, 2000); }); break;
+    case 'room-name': rm = selRoomObj(); mutate(function () { rm.name = v; }); break;
+    case 'room-name-in': rm = curRoom(); mutate(function () { rm.name = v; }); break;
+    case 'room-w': rm = selRoomObj(); mutate(function () { rm.w = Math.max(100, snapTo(toNum(val, rm.w), GRID)); }); break;
+    case 'room-h': rm = selRoomObj(); mutate(function () { rm.h = Math.max(100, snapTo(toNum(val, rm.h), GRID)); }); break;
+    case 'rack-label': r = selRack(); mutate(function () { r.label = (!v || v === String(r.num)) ? '' : v.slice(0, 24); }); break;
+    case 'shelf-label': r = selRack(); mutate(function () { r.shelves[i].label = (!v || v === shelfDefault(r, i)) ? '' : v.slice(0, 24); }); break;
+    case 'cell-name': r = selRack(); mutate(function () { r.shelves[i].names[j] = (!v || v === cellDefault(r, i, j)) ? '' : v.slice(0, 24); }); break;
+    case 'box-label': b = selBox(); mutate(function () { b.label = v.slice(0, 24) || b.label; }); break;
+    case 'pocket-label': p = selPocket(); mutate(function () { p.label = v.slice(0, 24) || p.label; }); break;
+    case 'q-box': S.boxLabel = val; break;
+    case 'q-pocket': S.pocketLabel = val; break;
+  }
+});
+document.addEventListener('keydown', function (e) {
+  var t = e.target, tag = (t.tagName || '').toLowerCase(), typing = tag === 'input' || tag === 'textarea' || tag === 'select';
+  if (e.key === 'Escape') { if (modalOpen) closeModal(); else if (S.sel) { S.sel = null; render(); } return; }
+  if (typing || modalOpen || S.screen === 'home') return;
+  var mod = e.ctrlKey || e.metaKey, kk = e.key.toLowerCase();
+  if (mod && kk === 'z') { e.preventDefault(); if (e.shiftKey) redo(); else undo(); return; }
+  if (mod && kk === 'y') { e.preventDefault(); redo(); return; }
+  if (S.mode === 'build' && S.sel) {
+    if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); deleteSel(); return; }
+    if (e.key === 'F2') { e.preventDefault(); var inf = S.sel.type === 'rack' ? { kind: 'rack-head', rackId: S.sel.id } : { kind: S.sel.type, id: S.sel.id }; if (S.sel.type !== 'room') startRename(inf); return; }
+    var dir = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] }[e.key];
+    if (dir) { e.preventDefault(); var o = getObj(S.sel), g = S.sel.type === 'room' ? GRID : SNAP; mutate(function () { o.x += dir[0] * g; o.y += dir[1] * g; }); return; }
+  }
+  if ((e.key === 'Enter' || e.key === ' ') && t.dataset && t.dataset.kind && S.mode === 'check') { e.preventDefault(); cycleUnit(readInfo(t)); }
+});
+$('#searchForm').addEventListener('submit', function (e) { e.preventDefault(); if (S.space) searchAddr($('#searchInp').value); });
+
+/* ═════════════ Старт ═════════════ */
+loadStore();
+render();
+})();
+</script>
+</body>
+</html>
