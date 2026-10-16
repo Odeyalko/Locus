@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Locus — адресное хранение</title>
+<meta name="author" content="Odeyalko">
 <meta name="description" content="Адресное хранение ПВЗ: стройте склад, отмечайте ячейки и передавайте смене одним файлом.">
 <meta name="theme-color" content="#000000">
 <link rel="icon" type="image/x-icon" href="favicon.ico">
@@ -47,7 +48,8 @@ button,input,textarea,select{font:inherit;color:inherit}
 .topbar{flex:none;height:56px;display:flex;align-items:center;gap:14px;padding:0 20px;border-bottom:1px solid var(--line);background:var(--bg)}
 .brand{display:flex;align-items:center;gap:12px;background:none;border:0;padding:0;cursor:pointer}
 .brand svg{height:17px;width:auto;display:block;color:var(--fg)}
-.brand-name{font-family:var(--font-display);font-size:22px;letter-spacing:.01em}
+.brand-name{display:inline-flex;align-items:baseline;gap:10px;font-family:var(--font-display);font-size:22px;letter-spacing:.01em}
+.brand-name .by{font-style:italic;font-weight:400;font-size:13px;letter-spacing:.01em;color:var(--muted)}
 .vsep{width:1px;height:20px;background:var(--line-strong);flex:none}
 .crumbs{display:flex;align-items:center;gap:8px;min-width:0;font-size:13px;color:var(--muted);white-space:nowrap}
 .crumbs button{background:none;border:0;padding:0;cursor:pointer;color:var(--muted);text-decoration:underline;text-underline-offset:3px}
@@ -82,6 +84,7 @@ button,input,textarea,select{font:inherit;color:inherit}
 #home{flex:1;min-height:0;overflow:auto;display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,1fr)}
 .home-hero{background:#000;color:#fff;padding:56px;display:flex;flex-direction:column;justify-content:space-between;gap:32px}
 .home-hero h1{margin:0;font-family:var(--font-display);font-weight:400;font-size:clamp(64px,10vw,124px);line-height:.92;letter-spacing:-.025em}
+.hero-by{margin-top:10px;font-family:var(--font-display);font-style:italic;font-size:clamp(20px,2.4vw,28px);color:rgba(255,255,255,.7)}
 .home-hero p{margin:18px 0 0;max-width:420px;font-size:17px;color:rgba(255,255,255,.75)}
 .demo{width:min(260px,70%);height:auto}
 .demo .frame{fill:none;stroke:rgba(255,255,255,.55);stroke-width:3}
@@ -280,6 +283,7 @@ button,input,textarea,select{font:inherit;color:inherit}
   .crumbs{flex:1 1 0;min-width:0;overflow:hidden}.crumbs .cur{overflow:hidden;text-overflow:ellipsis}
   .grow{display:none}.save-ind{display:none}
   .btn .long{display:none}.btn .short{display:inline}
+  .brand-name .by{display:none}
   #ws{grid-template-columns:minmax(0,1fr);grid-template-rows:auto auto minmax(0,1fr) auto}
   .inspector{grid-column:1;grid-row:4;border-left:0;border-top:1px solid var(--line);max-height:42vh}
   #ws.panel-closed .inspector{display:none}
@@ -293,7 +297,7 @@ button,input,textarea,select{font:inherit;color:inherit}
 <body>
 <div id="app">
   <header class="topbar">
-    <button class="brand" data-act="home" aria-label="На главную"><span class="logo"><svg aria-label="Lamoda" role="img" width="623" height="103" viewBox="0 0 623 103" xmlns="http://www.w3.org/2000/svg" fill="none"><path d="M109.568 32.0745H109.146C104.141 23.9152 94.1132 18.6096 81.2111 18.6096 56.8739 18.6096 41.54 35.933 41.54 60.5717 41.54 85.2103 56.8739 102.534 81.2111 102.534 94.0931 102.534 104.121 97.2282 109.146 89.0689H109.568V100.243H130.468V20.9007H109.568V32.0745ZM86.4965 85.351C69.3138 85.351 63.1441 77.4731 63.1441 60.5717 63.1441 43.6703 69.2937 35.7924 86.4965 35.7924 103.699 35.7924 109.849 43.6703 109.849 60.5717 109.849 77.4731 103.699 85.351 86.4965 85.351Z" fill="currentColor"/><path d="M21.2021 0H0V100.243H21.2021V0Z" fill="currentColor"/><path d="M265.82 18.6096C249.783 18.6096 240.478 24.8999 234.75 33.5013H234.469C229.445 24.7592 219.859 18.6096 205.831 18.6096 192.949 18.6096 182.921 23.9152 177.897 32.0745H177.475V20.9007H156.574V100.243H177.475V55.8489C177.475 41.8214 183.202 35.7924 197.391 35.7924 211.579 35.7924 217.306 41.8013 217.306 55.8489V100.243H238.207V55.8489C238.207 41.8214 243.935 35.7924 258.103 35.7924 272.271 35.7924 278.019 41.8013 278.019 55.8489V100.243H298.919V49.8199C298.919 31.2103 286.6 18.6096 265.84 18.6096H265.82Z" fill="currentColor"/><path d="M362.908 18.6096C335.837 18.6096 317.509 36.2144 317.509 60.5717 317.509 84.929 335.837 102.534 362.908 102.534 389.978 102.534 408.306 84.9089 408.306 60.5717 408.306 36.2345 389.978 18.6096 362.908 18.6096ZM362.908 85.351C345.725 85.351 339.274 77.4731 339.274 60.5717 339.274 43.6703 345.725 35.7924 362.908 35.7924 380.09 35.7924 386.541 43.6703 386.541 60.5717 386.541 77.4731 380.09 85.351 362.908 85.351Z" fill="currentColor"/><path d="M493.094 32.0745H492.672C487.668 23.9152 477.64 18.6096 464.738 18.6096 440.381 18.6096 425.067 35.933 425.067 60.5717 425.067 85.2103 440.381 102.534 464.738 102.534 477.62 102.534 487.648 97.2282 492.672 89.0689H493.094V100.243H513.995V0H493.094V32.0745ZM470.043 85.351C452.861 85.351 446.691 77.4731 446.691 60.5717 446.691 43.6703 452.841 35.7924 470.043 35.7924 487.246 35.7924 493.396 43.6703 493.396 60.5717 493.396 77.4731 487.226 85.351 470.043 85.351Z" fill="currentColor"/><path d="M602.099 20.9007V32.0745H601.677C596.673 23.9152 586.645 18.6096 573.743 18.6096 549.406 18.6096 534.072 35.933 534.072 60.5717 534.072 85.2103 549.385 102.534 573.743 102.534 586.625 102.534 596.653 97.2282 601.677 89.0689H602.099V100.243H623V20.9007H602.099ZM579.028 85.351C561.846 85.351 555.676 77.4731 555.676 60.5717 555.676 43.6703 561.825 35.7924 579.028 35.7924 596.231 35.7924 602.381 43.6703 602.381 60.5717 602.381 77.4731 596.231 85.351 579.028 85.351Z" fill="currentColor"/></svg></span><span class="vsep"></span><span class="brand-name">Locus</span></button>
+    <button class="brand" data-act="home" aria-label="На главную"><span class="logo"><svg aria-label="Lamoda" role="img" width="623" height="103" viewBox="0 0 623 103" xmlns="http://www.w3.org/2000/svg" fill="none"><path d="M109.568 32.0745H109.146C104.141 23.9152 94.1132 18.6096 81.2111 18.6096 56.8739 18.6096 41.54 35.933 41.54 60.5717 41.54 85.2103 56.8739 102.534 81.2111 102.534 94.0931 102.534 104.121 97.2282 109.146 89.0689H109.568V100.243H130.468V20.9007H109.568V32.0745ZM86.4965 85.351C69.3138 85.351 63.1441 77.4731 63.1441 60.5717 63.1441 43.6703 69.2937 35.7924 86.4965 35.7924 103.699 35.7924 109.849 43.6703 109.849 60.5717 109.849 77.4731 103.699 85.351 86.4965 85.351Z" fill="currentColor"/><path d="M21.2021 0H0V100.243H21.2021V0Z" fill="currentColor"/><path d="M265.82 18.6096C249.783 18.6096 240.478 24.8999 234.75 33.5013H234.469C229.445 24.7592 219.859 18.6096 205.831 18.6096 192.949 18.6096 182.921 23.9152 177.897 32.0745H177.475V20.9007H156.574V100.243H177.475V55.8489C177.475 41.8214 183.202 35.7924 197.391 35.7924 211.579 35.7924 217.306 41.8013 217.306 55.8489V100.243H238.207V55.8489C238.207 41.8214 243.935 35.7924 258.103 35.7924 272.271 35.7924 278.019 41.8013 278.019 55.8489V100.243H298.919V49.8199C298.919 31.2103 286.6 18.6096 265.84 18.6096H265.82Z" fill="currentColor"/><path d="M362.908 18.6096C335.837 18.6096 317.509 36.2144 317.509 60.5717 317.509 84.929 335.837 102.534 362.908 102.534 389.978 102.534 408.306 84.9089 408.306 60.5717 408.306 36.2345 389.978 18.6096 362.908 18.6096ZM362.908 85.351C345.725 85.351 339.274 77.4731 339.274 60.5717 339.274 43.6703 345.725 35.7924 362.908 35.7924 380.09 35.7924 386.541 43.6703 386.541 60.5717 386.541 77.4731 380.09 85.351 362.908 85.351Z" fill="currentColor"/><path d="M493.094 32.0745H492.672C487.668 23.9152 477.64 18.6096 464.738 18.6096 440.381 18.6096 425.067 35.933 425.067 60.5717 425.067 85.2103 440.381 102.534 464.738 102.534 477.62 102.534 487.648 97.2282 492.672 89.0689H493.094V100.243H513.995V0H493.094V32.0745ZM470.043 85.351C452.861 85.351 446.691 77.4731 446.691 60.5717 446.691 43.6703 452.841 35.7924 470.043 35.7924 487.246 35.7924 493.396 43.6703 493.396 60.5717 493.396 77.4731 487.226 85.351 470.043 85.351Z" fill="currentColor"/><path d="M602.099 20.9007V32.0745H601.677C596.673 23.9152 586.645 18.6096 573.743 18.6096 549.406 18.6096 534.072 35.933 534.072 60.5717 534.072 85.2103 549.385 102.534 573.743 102.534 586.625 102.534 596.653 97.2282 601.677 89.0689H602.099V100.243H623V20.9007H602.099ZM579.028 85.351C561.846 85.351 555.676 77.4731 555.676 60.5717 555.676 43.6703 561.825 35.7924 579.028 35.7924 596.231 35.7924 602.381 43.6703 602.381 60.5717 602.381 77.4731 596.231 85.351 579.028 85.351Z" fill="currentColor"/></svg></span><span class="vsep"></span><span class="brand-name">Locus<em class="by">by Odeyalko</em></span></button>
     <nav class="crumbs" id="crumbs" aria-label="Путь"></nav>
     <span class="grow"></span>
     <span class="save-ind" id="saveInd"></span>
@@ -305,7 +309,8 @@ button,input,textarea,select{font:inherit;color:inherit}
     <section class="home-hero">
       <div>
         <h1>Locus</h1>
-        <p>Адресное хранение ПВЗ. Смена закончилась — следующая сразу видит, где всё уже сделано.</p>
+        <div class="hero-by">by Odeyalko</div>
+        <p>Адресное хранение ПВЗ. Смена закончилась — следующая сразу видит, где всё уже разложено.</p>
       </div>
       <svg class="demo" viewBox="0 0 260 300" aria-hidden="true">
         <rect class="frame" x="8" y="8" width="244" height="284"/>
@@ -710,7 +715,7 @@ function selBox() { var r = curRoom(); return r && S.sel && S.sel.type === 'box'
 function selPocket() { var r = curRoom(); return r && S.sel && S.sel.type === 'pocket' ? r.pockets.find(function (k) { return k.id === S.sel.id; }) : null; }
 function selRoomObj() { return S.sel && S.sel.type === 'room' ? S.space.rooms.find(function (r) { return r.id === S.sel.id; }) : null; }
 function legendInline() { return '<div class="legend-inline"><span><i style="background:var(--cell)"></i>не проверено</span><span><i style="background:var(--done-bg);border-color:var(--done-line)"></i>готово</span><span><i style="background:var(--warn-bg);border-color:var(--warn-line)"></i>внимание</span></div>'; }
-function noteField() { return '<label class="fld"><span>Заметка для следующей смены</span><textarea data-f="space-note" placeholder="Например: 4-й стеллаж не закончили, сорри">' + esc(S.space.note) + '</textarea></label>'; }
+function noteField() { return '<label class="fld"><span>Заметка для следующей смены</span><textarea data-f="space-note" placeholder="Например: 4-й стеллаж не закончили, коробки у двери ждут сортировки">' + esc(S.space.note) + '</textarea></label>'; }
 function stepper(act, extra, val, label) {
   return '<div class="stepper"><button data-act="' + act + '"' + extra + ' data-d="-1" aria-label="Меньше ' + label + '">−</button><b>' + val + '</b><button data-act="' + act + '"' + extra + ' data-d="1" aria-label="Больше ' + label + '">+</button></div>';
 }
