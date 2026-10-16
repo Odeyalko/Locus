@@ -310,7 +310,7 @@ button,input,textarea,select{font:inherit;color:inherit}
       <div>
         <h1>Locus</h1>
         <div class="hero-by">by Odeyalko</div>
-        <p>Адресное хранение ПВЗ. Смена закончилась — следующая сразу видит, где всё уже разложено.</p>
+        <p>Адресное хранение ПВЗ. Смена закончилась — следующая сразу видит, где всё уже сделано.</p>
       </div>
       <svg class="demo" viewBox="0 0 260 300" aria-hidden="true">
         <rect class="frame" x="8" y="8" width="244" height="284"/>
@@ -715,7 +715,7 @@ function selBox() { var r = curRoom(); return r && S.sel && S.sel.type === 'box'
 function selPocket() { var r = curRoom(); return r && S.sel && S.sel.type === 'pocket' ? r.pockets.find(function (k) { return k.id === S.sel.id; }) : null; }
 function selRoomObj() { return S.sel && S.sel.type === 'room' ? S.space.rooms.find(function (r) { return r.id === S.sel.id; }) : null; }
 function legendInline() { return '<div class="legend-inline"><span><i style="background:var(--cell)"></i>не проверено</span><span><i style="background:var(--done-bg);border-color:var(--done-line)"></i>готово</span><span><i style="background:var(--warn-bg);border-color:var(--warn-line)"></i>внимание</span></div>'; }
-function noteField() { return '<label class="fld"><span>Заметка для следующей смены</span><textarea data-f="space-note" placeholder="Например: 4-й стеллаж не закончили, коробки у двери ждут сортировки">' + esc(S.space.note) + '</textarea></label>'; }
+function noteField() { return '<label class="fld"><span>Заметка для следующей смены</span><textarea data-f="space-note" placeholder="Например: 4-й стеллаж не закончили, сорри">' + esc(S.space.note) + '</textarea></label>'; }
 function stepper(act, extra, val, label) {
   return '<div class="stepper"><button data-act="' + act + '"' + extra + ' data-d="-1" aria-label="Меньше ' + label + '">−</button><b>' + val + '</b><button data-act="' + act + '"' + extra + ' data-d="1" aria-label="Больше ' + label + '">+</button></div>';
 }
